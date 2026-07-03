@@ -1,0 +1,31 @@
+{
+  "name": "Velázquez Servicio Barométrico",
+  "short_name": "Velázquez",
+  "description": "Contrata servicios y sigue tus puntos con Velázquez Servicio Barométrico.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#EAF6FB",
+  "theme_color": "#0B5E8C",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
