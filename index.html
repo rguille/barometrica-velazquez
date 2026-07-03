@@ -100,6 +100,18 @@
 
   .search-row{display:flex; gap:8px; align-items:flex-end; flex-wrap:wrap;}
 
+  .search-bar{display:flex; align-items:center; gap:8px; padding:9px 12px; border-radius:8px; background:#fff; border:1px solid var(--line); margin-bottom:12px;}
+  .search-bar input{border:none; outline:none; width:100%; font-size:13.5px; background:transparent;}
+
+  .client-list{list-style:none; padding:0; margin:0; display:flex; flex-direction:column; gap:8px;}
+  .client-item{display:flex; align-items:center; justify-content:space-between; gap:12px; padding:13px 16px; border-radius:10px; background:#fff; border:1px solid var(--line);}
+  .client-item.active{background:var(--sky-alt); border-color:var(--sea);}
+  .client-name{font-weight:700; font-size:14.5px; color:var(--sea-deep);}
+  .client-meta{color:var(--ink-soft); font-size:12.5px; margin-top:2px; line-height:1.5;}
+  .client-meta a{color:var(--sea); text-decoration:underline;}
+  .client-pts{font-family:var(--f-mono); font-size:13px; color:var(--leaf-deep); font-weight:700; white-space:nowrap;}
+  .icon-btn{background:none; border:none; display:flex; align-items:center; color:var(--ink-soft);}
+
   .service-grid{display:grid; grid-template-columns:1fr; gap:14px;}
   @media (min-width:560px){ .service-grid{grid-template-columns:1fr 1fr;} }
   .service-card{background:#fff; border:1px solid var(--line); border-radius:12px; padding:18px; display:flex; flex-direction:column; gap:12px; position:relative; overflow:hidden;}
@@ -336,13 +348,12 @@ function normPhone(p){ return String(p || "").replace(/[^\d]/g, ""); }
 // TODO: pega acá la configuración de tu proyecto de Firebase
 // (Firebase console → ⚙️ Configuración del proyecto → tus apps → SDK setup and configuration).
 const FIREBASE_CONFIG = {
-  apiKey: "AIzaSyC462vHUiHf3lggIN6oJiokrHDnmmMTeR8",
-  authDomain: "velazquez-barometrica.firebaseapp.com",
-  projectId: "velazquez-barometrica",
-  storageBucket: "velazquez-barometrica.firebasestorage.app",
-  messagingSenderId: "134116231018",
-  appId: "1:134116231018:web:19f4b364c06497e97a0713",
-  measurementId: "G-KYE56SV7FK"
+  apiKey: "TU_API_KEY",
+  authDomain: "TU_PROYECTO.firebaseapp.com",
+  projectId: "TU_PROYECTO",
+  storageBucket: "TU_PROYECTO.appspot.com",
+  messagingSenderId: "TU_SENDER_ID",
+  appId: "TU_APP_ID",
 };
 
 let db = null;
