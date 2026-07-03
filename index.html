@@ -107,7 +107,6 @@
   .service-name{font-family:var(--f-display); font-size:17.5px; font-weight:700; color:var(--sea-deep);}
   .service-row{display:flex; align-items:center; justify-content:space-between;}
   .service-pts{font-family:var(--f-mono); font-size:13px; color:var(--leaf-deep); font-weight:700;}
-  .service-price{font-family:var(--f-mono); font-size:13px; color:var(--ink-soft);}
   .btn-contract{padding:10px; border-radius:8px; border:none; background:var(--sea); color:#fff; font-weight:700; font-size:13.5px; display:flex; align-items:center; justify-content:center; gap:6px;}
 
   .empty{text-align:center; padding:44px 24px; border:1px dashed var(--line); border-radius:12px; color:var(--ink-soft); font-size:13.5px; background:#fff;}
@@ -240,11 +239,11 @@
 /* ---------------- constants & helpers ---------------- */
 const MESES = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
 const DEFAULT_CATALOG = [
-  { id: "s1", nombre: "Vaciado de fosa séptica", puntos: 100, precio: 80 },
-  { id: "s2", nombre: "Limpieza de pozo negro", puntos: 90, precio: 70 },
-  { id: "s3", nombre: "Desatasco de tuberías", puntos: 70, precio: 55 },
-  { id: "s4", nombre: "Suministro de agua potable", puntos: 120, precio: 95 },
-  { id: "s5", nombre: "Limpieza de depósitos y aljibes", puntos: 150, precio: 110 },
+  // TODO: ajusta los puntos de cada servicio si lo necesitas — es lo único que hay que tocar acá.
+  { id: "s1", nombre: "Agua potable", puntos: 100 },
+  { id: "s2", nombre: "Aspirado de pozo", puntos: 100 },
+  { id: "s3", nombre: "Aspirado de grasera", puntos: 90 },
+  { id: "s4", nombre: "Desobstrucción", puntos: 80 },
 ];
 const DEFAULT_CENTER = [-34.9011, -54.9585]; // Maldonado, Uruguay
 const DEFAULT_ZOOM = 10;
@@ -262,6 +261,11 @@ const BUSINESS = {
   address: "Añade aquí la dirección de la empresa",
   // TODO: confirma que este es el número de WhatsApp correcto de la empresa.
   whatsapp: "59895143777",
+  // Número interno al que se avisa cada nueva solicitud de contratación.
+  notifyWhatsapp: "59895003949",
+  // TODO: cuando tengas la Cloud Function desplegada (ver GUIA-WHATSAPP-BUSINESS.md),
+  // pega acá su URL. Mientras esté vacío, se sigue usando el enlace wa.me manual.
+  whatsappApiEndpoint: "",
   social: [
     { label: "Facebook", url: "https://m.facebook.com/116502418538741/" },
     { label: "Instagram", url: "https://www.instagram.com/barometrica_velazquez_?igsh=OWI2dTBiZnFxank2" },
@@ -270,6 +274,35 @@ const BUSINESS = {
 
 function buildWhatsAppMessage(client, service){
   return `Hola ${client.nombre}, te escribimos de Velázquez Barométrica para coordinar el día y la hora de tu servicio de ${service.nombre.toLowerCase()}. ¿Qué disponibilidad tenés?`;
+}
+function buildNewRequestMessage(data, service){
+  const addr = data.direccion + (data.localidad ? ", " + data.localidad : "");
+  return `Nueva solicitud de contratación:\nServicio: ${service.nombre}\nCliente: ${data.nombre} ${data.apellidos}\nTeléfono: ${data.telefono}\nDirección: ${addr}`;
+}
+// Envía el aviso de nueva solicitud. Si BUSINESS.whatsappApiEndpoint está configurado,
+// lo manda en silencio por la API de WhatsApp Business (Cloud API) a través de tu
+// backend/Cloud Function. Si no, cae de vuelta al enlace wa.me manual de siempre.
+function notifyNewRequest(data, service){
+  const addr = data.direccion + (data.localidad ? ", " + data.localidad : "");
+  if(BUSINESS.whatsappApiEndpoint){
+    fetch(BUSINESS.whatsappApiEndpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        to: BUSINESS.notifyWhatsapp,
+        nombre: data.nombre,
+        apellidos: data.apellidos,
+        telefono: data.telefono,
+        direccion: addr,
+        servicio: service.nombre,
+      }),
+    }).catch(() => {
+      // Si el backend falla, igual dejamos el enlace manual como respaldo.
+      window.open(whatsappUrl(BUSINESS.notifyWhatsapp, buildNewRequestMessage(data, service)), "_blank");
+    });
+  }else{
+    window.open(whatsappUrl(BUSINESS.notifyWhatsapp, buildNewRequestMessage(data, service)), "_blank");
+  }
 }
 function whatsappUrl(phone, message){
   return `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
@@ -294,15 +327,14 @@ function normPhone(p){ return String(p || "").replace(/[^\d]/g, ""); }
 // TODO: pega acá la configuración de tu proyecto de Firebase
 // (Firebase console → ⚙️ Configuración del proyecto → tus apps → SDK setup and configuration).
 const FIREBASE_CONFIG = {
-  apiKey: "AIzaSyC462vHUiHf3lggIN6oJiokrHDnmmMTeR8",
-  authDomain: "velazquez-barometrica.firebaseapp.com",
-  projectId: "velazquez-barometrica",
-  storageBucket: "velazquez-barometrica.firebasestorage.app",
-  messagingSenderId: "134116231018",
-  messagingSenderId: "G-KYE56SV7FK",
-  appId: "1:134116231018:web:19f4b364c06497e97a0713",
+  apiKey: "TU_API_KEY",
+  authDomain: "TU_PROYECTO.firebaseapp.com",
+  projectId: "TU_PROYECTO",
+  storageBucket: "TU_PROYECTO.appspot.com",
+  messagingSenderId: "TU_SENDER_ID",
+  appId: "TU_APP_ID",
 };
-  
+
 let db = null;
 let firebaseReady = false;
 try{
@@ -356,15 +388,15 @@ let toastTimer = null;
 
 /* ---------------- data ops ---------------- */
 async function init(){
-  const [clients, transactions, catalog] = await Promise.all([
+  const [clients, transactions] = await Promise.all([
     loadKey("clients", []),
     loadKey("transactions", []),
-    loadKey("catalog", null),
   ]);
   state.clients = clients;
   state.transactions = transactions;
-  if(catalog === null){ state.catalog = DEFAULT_CATALOG; saveKey("catalog", DEFAULT_CATALOG); }
-  else state.catalog = catalog;
+  // El catálogo es siempre interno: sale directo del código (DEFAULT_CATALOG),
+  // nunca se guarda ni se lee de la base de datos, así no queda desactualizado.
+  state.catalog = DEFAULT_CATALOG;
   state.loading = false;
   render();
 }
@@ -395,7 +427,13 @@ async function confirmContract(serviceId, data){
   await saveKey("clients", state.clients);
 
   const date = new Date().toISOString();
-  const txn = { id: uid(), clientId: client.id, serviceId: service.id, serviceName: service.nombre, puntos: service.puntos, precio: service.precio, date, expiresAt: plusOneYear(date) };
+  // Queda "pendiente" y sin puntos: los puntos se suman a mano desde el Panel
+  // interno recién cuando el servicio se realizó de verdad.
+  const txn = {
+    id: uid(), clientId: client.id, serviceId: service.id, serviceName: service.nombre,
+    puntosServicio: service.puntos, puntos: 0, status: "pendiente",
+    date, completedAt: null, expiresAt: null,
+  };
   state.transactions = [txn, ...state.transactions];
   await saveKey("transactions", state.transactions);
 
@@ -406,10 +444,21 @@ async function confirmContract(serviceId, data){
   state.contractModal = { serviceId, matchedClientId: client.id, confirmed: { client, service } };
   render();
 }
+async function markServiceCompleted(txnId){
+  const txn = state.transactions.find(t => t.id === txnId);
+  if(!txn) return;
+  const client = state.clients.find(c => c.id === txn.clientId);
+  const now = new Date().toISOString();
+  const updated = { ...txn, status: "completado", puntos: txn.puntosServicio, completedAt: now, expiresAt: plusOneYear(now) };
+  state.transactions = state.transactions.map(t => t.id === txnId ? updated : t);
+  await saveKey("transactions", state.transactions);
+  showToast(`Servicio confirmado: +${updated.puntos} pts para ${client ? client.nombre : "el cliente"}`);
+  render();
+}
 async function purgeExpired(){
   const now = new Date().toISOString();
   const before = state.transactions.length;
-  state.transactions = state.transactions.filter(t => t.expiresAt > now);
+  state.transactions = state.transactions.filter(t => t.status === "pendiente" || t.expiresAt > now);
   const removed = before - state.transactions.length;
   await saveKey("transactions", state.transactions);
   showToast(removed > 0 ? `${removed} punto(s) caducado(s) eliminado(s)` : "No había puntos caducados");
@@ -588,7 +637,6 @@ function renderContratarView(){
           </div>
           <div class="service-row">
             <span class="service-pts">+${s.puntos} pts</span>
-            <span class="service-price">${Number(s.precio).toFixed(2)} €</span>
           </div>
           <button class="btn-contract" data-contract="${s.id}">${ICONS.truck} Contratar</button>
         </div>
@@ -620,9 +668,8 @@ function renderContractModal(){
           <div class="confirm-check">${ICONS.check}</div>
           <h2 style="font-family:var(--f-display); font-size:20px; font-weight:700; color:var(--sea-deep); margin:0 0 8px;">¡Contratación registrada!</h2>
           <p style="font-size:13.5px; color:var(--ink-soft); margin-bottom:18px;">
-            <strong style="color:var(--ink);">${escapeHtml(doneService.nombre)}</strong> — sumaste
-            <strong style="color:var(--leaf-deep);">+${doneService.puntos} pts</strong>.
-            En la brevedad nos pondremos en contacto contigo para coordinar el día y la hora del servicio.
+            Registramos tu solicitud de <strong style="color:var(--ink);">${escapeHtml(doneService.nombre)}</strong>.
+            En la brevedad nos pondremos en contacto contigo para coordinar el día y la hora. Los puntos se suman una vez realizado el servicio.
           </p>
           <button class="btn-primary" id="modal-close" style="width:100%; margin-top:0;">Entendido</button>
         </div>
@@ -639,7 +686,7 @@ function renderContractModal(){
         </div>
         <div class="modal-service">
           <span class="modal-service-name">${escapeHtml(service.nombre)}</span>
-          <span class="modal-service-meta">+${service.puntos} pts · ${Number(service.precio).toFixed(2)} €</span>
+          <span class="modal-service-meta">+${service.puntos} pts</span>
         </div>
 
         <div class="lookup-row">
@@ -741,6 +788,11 @@ function attachModalListeners(){
       lat: state.pendingMarker ? state.pendingMarker.lat : (state.clients.find(c=>c.id===state.contractModal.matchedClientId)?.lat ?? null),
       lng: state.pendingMarker ? state.pendingMarker.lng : (state.clients.find(c=>c.id===state.contractModal.matchedClientId)?.lng ?? null),
     };
+    // Si hay API de WhatsApp Business conectada, esto se manda solo, en silencio.
+    // Si no, abre wa.me en el mismo toque (antes de los awaits) para que el
+    // navegador no lo bloquee como ventana emergente.
+    const service = state.catalog.find(s => s.id === state.contractModal.serviceId);
+    if(service) notifyNewRequest(data, service);
     confirmContract(state.contractModal.serviceId, data);
   });
 }
@@ -872,7 +924,7 @@ function renderFaqView(){
       </table>
     </div>
     <p style="font-size:12px; color:var(--ink-soft); margin:-16px 0 28px;">
-      Regla general: junta el equivalente a ${REWARD_MULTIPLIER} contrataciones del mismo servicio y la siguiente es gratis. Por ejemplo, la limpieza de pozo negro suma 90 pts cada vez — con ${90 * REWARD_MULTIPLIER} pts (${REWARD_MULTIPLIER} limpiezas) obtienes la cuarta gratis.
+      Regla general: junta el equivalente a ${REWARD_MULTIPLIER} contrataciones del mismo servicio y la siguiente es gratis. Por ejemplo, el aspirado de pozo suma 100 pts cada vez — con ${100 * REWARD_MULTIPLIER} pts (${REWARD_MULTIPLIER} servicios) obtienes el cuarto gratis.
     </p>
 
     <details class="faq-item" open>
@@ -881,7 +933,7 @@ function renderFaqView(){
     </details>
     <details class="faq-item">
       <summary>¿Cuántos puntos necesito para un servicio gratis?</summary>
-      <p>Depende del servicio: necesitas juntar ${REWARD_MULTIPLIER} veces los puntos de esa misma contratación. Por ejemplo, si la limpieza de pozo negro da 90 pts, con 270 pts acumulados te corresponde una limpieza de pozo negro gratis. Consulta la tabla de arriba para ver el resto de servicios.</p>
+      <p>Depende del servicio: necesitas juntar ${REWARD_MULTIPLIER} veces los puntos de esa misma contratación. Por ejemplo, si el aspirado de pozo da 100 pts, con 300 pts acumulados te corresponde un aspirado de pozo gratis. Consulta la tabla de arriba para ver el resto de servicios.</p>
     </details>
     <details class="faq-item">
       <summary>¿Puedo mezclar puntos de distintos servicios para canjear un premio?</summary>
@@ -917,6 +969,7 @@ function renderAdminGate(){
 function renderAdminPanel(){
   const purchaseTxns = state.transactions.filter(t => t.type !== "redeem");
   const redeemTxns = state.transactions.filter(t => t.type === "redeem");
+  const pendingTxns = state.transactions.filter(t => t.status === "pendiente").sort((a,b) => new Date(a.date) - new Date(b.date));
   const activePointsTotal = state.clients.reduce((sum, c) => sum + activePointsFor(c.id), 0);
 
   return `
@@ -930,10 +983,34 @@ function renderAdminPanel(){
     <div class="kpi-grid" style="margin-bottom:24px;">
       ${kpiCard("Clientes registrados", state.clients.length)}
       ${kpiCard("Servicios contratados", purchaseTxns.length)}
+      ${kpiCard("Pendientes de confirmar", pendingTxns.length)}
       ${kpiCard("Puntos activos en circulación", activePointsTotal)}
       ${kpiCard("Premios canjeados", redeemTxns.length)}
     </div>
 
+    <h2 style="font-family:var(--f-display); font-size:17px; font-weight:700; color:var(--sea-deep); margin-bottom:12px;">Solicitudes pendientes</h2>
+    ${pendingTxns.length === 0 ? emptyState("No hay solicitudes esperando confirmación.") : `
+      <ul class="client-list" id="pending-list" style="margin-bottom:32px;">
+        ${pendingTxns.map(t => {
+          const client = state.clients.find(c => c.id === t.clientId);
+          if(!client) return "";
+          return `
+            <li class="client-item" style="cursor:default; align-items:flex-start; flex-direction:column; gap:8px;">
+              <div style="display:flex; align-items:center; justify-content:space-between; width:100%; gap:12px;">
+                <div style="min-width:0;">
+                  <div class="client-name">${escapeHtml(t.serviceName)} — ${escapeHtml(client.nombre)} ${escapeHtml(client.apellidos)}</div>
+                  <div class="client-meta">${escapeHtml(client.telefono)}${client.localidad ? " · " + escapeHtml(client.localidad) : ""} · pedido el ${fmtDate(t.date)}</div>
+                </div>
+                <span class="client-pts">+${t.puntosServicio} pts</span>
+              </div>
+              <button class="btn-contract" style="width:auto; padding:8px 14px;" data-complete="${t.id}">${ICONS.check} Marcar como realizado</button>
+            </li>
+          `;
+        }).join("")}
+      </ul>
+    `}
+
+    <h2 style="font-family:var(--f-display); font-size:17px; font-weight:700; color:var(--sea-deep); margin-bottom:12px;">Clientes</h2>
     <div class="search-bar" style="margin-bottom:12px;">${ICONS.search}<input id="admin-search" placeholder="Buscar cliente por nombre o teléfono…" /></div>
 
     ${state.clients.length === 0 ? emptyState("Todavía no hay clientes registrados.") : `
@@ -996,6 +1073,9 @@ function attachAdminListeners(){
     return;
   }
   document.getElementById("admin-logout").addEventListener("click", () => { state.adminUnlocked = false; render(); });
+  document.querySelectorAll("[data-complete]").forEach(btn => {
+    btn.addEventListener("click", () => markServiceCompleted(btn.dataset.complete));
+  });
   const searchInput = document.getElementById("admin-search");
   if(searchInput){
     searchInput.addEventListener("input", () => {
@@ -1124,6 +1204,17 @@ function renderPuntosDetail(selected){
                       <td style="font-family:var(--f-mono); font-size:12.5px; color:var(--rust);">${t.puntos}</td>
                       <td style="font-family:var(--f-mono); font-size:12.5px;">—</td>
                       <td><span class="badge" style="background:var(--sky-alt); color:var(--sea-deep);">Canjeado</span></td>
+                    </tr>
+                  `;
+                }
+                if(t.status === "pendiente"){
+                  return `
+                    <tr>
+                      <td>${escapeHtml(t.serviceName)}</td>
+                      <td style="font-family:var(--f-mono); font-size:12.5px;">${fmtDate(t.date)}</td>
+                      <td style="font-family:var(--f-mono); font-size:12.5px; color:var(--ink-soft);">+${t.puntosServicio} al confirmar</td>
+                      <td style="font-family:var(--f-mono); font-size:12.5px;">—</td>
+                      <td><span class="badge" style="background:var(--rust-soft); color:var(--rust);">Pendiente</span></td>
                     </tr>
                   `;
                 }
