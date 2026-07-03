@@ -273,17 +273,26 @@ const BUSINESS = {
 };
 
 function buildWhatsAppMessage(client, service){
-  return `Hola ${client.nombre}, te escribimos de Velázquez Barométrica para coordinar el día y la hora de tu servicio de ${service.nombre.toLowerCase()}. ¿Qué disponibilidad tenés?`;
+  const addr = client.direccion
+    ? client.direccion + (client.localidad ? ", " + client.localidad : "")
+    : "sin dirección registrada";
+  return `Hola ${client.nombre}, te escribimos de Velázquez Barométrica para coordinar el día y la hora de tu servicio de ${service.nombre.toLowerCase()}. Tenemos registrada tu dirección como: ${addr}. ¿Qué disponibilidad tenés?`;
 }
 function buildNewRequestMessage(data, service){
   const addr = data.direccion + (data.localidad ? ", " + data.localidad : "");
-  return `Nueva solicitud de contratación:\nServicio: ${service.nombre}\nCliente: ${data.nombre} ${data.apellidos}\nTeléfono: ${data.telefono}\nDirección: ${addr}`;
+  const mapLine = (data.lat && data.lng)
+    ? `\nUbicación: https://www.openstreetmap.org/?mlat=${data.lat}&mlon=${data.lng}#map=16/${data.lat}/${data.lng}`
+    : "";
+  return `Nueva solicitud de contratación:\nServicio: ${service.nombre}\nCliente: ${data.nombre} ${data.apellidos}\nTeléfono: ${data.telefono}\nDirección: ${addr}${mapLine}`;
 }
 // Envía el aviso de nueva solicitud. Si BUSINESS.whatsappApiEndpoint está configurado,
 // lo manda en silencio por la API de WhatsApp Business (Cloud API) a través de tu
 // backend/Cloud Function. Si no, cae de vuelta al enlace wa.me manual de siempre.
 function notifyNewRequest(data, service){
   const addr = data.direccion + (data.localidad ? ", " + data.localidad : "");
+  const mapUrl = (data.lat && data.lng)
+    ? `https://www.openstreetmap.org/?mlat=${data.lat}&mlon=${data.lng}#map=16/${data.lat}/${data.lng}`
+    : "";
   if(BUSINESS.whatsappApiEndpoint){
     fetch(BUSINESS.whatsappApiEndpoint, {
       method: "POST",
@@ -293,7 +302,7 @@ function notifyNewRequest(data, service){
         nombre: data.nombre,
         apellidos: data.apellidos,
         telefono: data.telefono,
-        direccion: addr,
+        direccion: mapUrl ? `${addr} (mapa: ${mapUrl})` : addr,
         servicio: service.nombre,
       }),
     }).catch(() => {
@@ -327,13 +336,12 @@ function normPhone(p){ return String(p || "").replace(/[^\d]/g, ""); }
 // TODO: pega acá la configuración de tu proyecto de Firebase
 // (Firebase console → ⚙️ Configuración del proyecto → tus apps → SDK setup and configuration).
 const FIREBASE_CONFIG = {
-  apiKey: "AIzaSyC462vHUiHf3lggIN6oJiokrHDnmmMTeR8",
-  authDomain: "velazquez-barometrica.firebaseapp.com",
-  projectId: "velazquez-barometrica",
-  storageBucket: "velazquez-barometrica.firebasestorage.app",
-  messagingSenderId: "134116231018",
-  appId: "1:134116231018:web:19f4b364c06497e97a0713",
-  measurementId: "G-KYE56SV7FK"
+  apiKey: "TU_API_KEY",
+  authDomain: "TU_PROYECTO.firebaseapp.com",
+  projectId: "TU_PROYECTO",
+  storageBucket: "TU_PROYECTO.appspot.com",
+  messagingSenderId: "TU_SENDER_ID",
+  appId: "TU_APP_ID",
 };
 
 let db = null;
@@ -995,14 +1003,19 @@ function renderAdminPanel(){
         ${pendingTxns.map(t => {
           const client = state.clients.find(c => c.id === t.clientId);
           if(!client) return "";
+          const addr = client.direccion + (client.localidad ? ", " + client.localidad : "");
+          const mapLink = (client.lat && client.lng)
+            ? ` · <a href="https://www.openstreetmap.org/?mlat=${client.lat}&mlon=${client.lng}#map=16/${client.lat}/${client.lng}" target="_blank" rel="noopener">Ver en el mapa</a>`
+            : "";
           return `
             <li class="client-item" style="cursor:default; align-items:flex-start; flex-direction:column; gap:8px;">
               <div style="display:flex; align-items:center; justify-content:space-between; width:100%; gap:12px;">
                 <div style="min-width:0;">
                   <div class="client-name">${escapeHtml(t.serviceName)} — ${escapeHtml(client.nombre)} ${escapeHtml(client.apellidos)}</div>
-                  <div class="client-meta">${escapeHtml(client.telefono)}${client.localidad ? " · " + escapeHtml(client.localidad) : ""} · pedido el ${fmtDate(t.date)}</div>
+                  <div class="client-meta">${escapeHtml(client.telefono)} · ${escapeHtml(addr)}${mapLink}</div>
+                  <div class="client-meta">Pedido el ${fmtDate(t.date)}</div>
                 </div>
-                <span class="client-pts">+${t.puntosServicio} pts</span>
+                <span class="badge badge-soon" style="white-space:nowrap;">${t.puntosServicio} pts al confirmar</span>
               </div>
               <button class="btn-contract" style="width:auto; padding:8px 14px;" data-complete="${t.id}">${ICONS.check} Marcar como realizado</button>
             </li>
