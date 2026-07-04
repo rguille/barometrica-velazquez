@@ -259,6 +259,11 @@ const DEFAULT_CATALOG = [
 ];
 const DEFAULT_CENTER = [-34.9011, -54.9585]; // Maldonado, Uruguay
 const DEFAULT_ZOOM = 10;
+const UY_DEPARTAMENTOS = [
+  "Artigas","Canelones","Cerro Largo","Colonia","Durazno","Flores","Florida",
+  "Lavalleja","Maldonado","Montevideo","Paysandú","Río Negro","Rivera","Rocha",
+  "Salto","San José","Soriano","Tacuarembó","Treinta y Tres",
+];
 const REWARD_MULTIPLIER = 3; // puntos para un servicio gratis = puntos del servicio x este número
 const ADMIN_PIN = "2468"; // TODO: cambia este PIN interno antes de usarlo con clientes reales.
 
@@ -284,24 +289,28 @@ const BUSINESS = {
   ],
 };
 
+function formatAddress(c){
+  const parts = [];
+  if(c.direccion) parts.push(c.direccion);
+  if(c.codigoPostal) parts.push(`CP ${c.codigoPostal}`);
+  if(c.localidad) parts.push(c.localidad);
+  if(c.departamento) parts.push(c.departamento);
+  return parts.length ? parts.join(", ") : "sin dirección registrada";
+}
 function buildWhatsAppMessage(client, service){
-  const addr = client.direccion
-    ? client.direccion + (client.localidad ? ", " + client.localidad : "")
-    : "sin dirección registrada";
-  return `Hola ${client.nombre}, te escribimos de Velázquez Barométrica para coordinar el día y la hora de tu servicio de ${service.nombre.toLowerCase()}. Tenemos registrada tu dirección como: ${addr}. ¿Qué disponibilidad tenés?`;
+  return `Hola ${client.nombre}, te escribimos de Velázquez Barométrica para coordinar el día y la hora de tu servicio de ${service.nombre.toLowerCase()}. Tenemos registrada tu dirección como: ${formatAddress(client)}. ¿Qué disponibilidad tenés?`;
 }
 function buildNewRequestMessage(data, service){
-  const addr = data.direccion + (data.localidad ? ", " + data.localidad : "");
   const mapLine = (data.lat && data.lng)
     ? `\nUbicación: https://www.openstreetmap.org/?mlat=${data.lat}&mlon=${data.lng}#map=16/${data.lat}/${data.lng}`
     : "";
-  return `Nueva solicitud de contratación:\nServicio: ${service.nombre}\nCliente: ${data.nombre} ${data.apellidos}\nTeléfono: ${data.telefono}\nDirección: ${addr}${mapLine}`;
+  return `Nueva solicitud de contratación:\nServicio: ${service.nombre}\nCliente: ${data.nombre} ${data.apellidos}\nTeléfono: ${data.telefono}\nDirección: ${formatAddress(data)}${mapLine}`;
 }
 // Envía el aviso de nueva solicitud. Si BUSINESS.whatsappApiEndpoint está configurado,
 // lo manda en silencio por la API de WhatsApp Business (Cloud API) a través de tu
 // backend/Cloud Function. Si no, cae de vuelta al enlace wa.me manual de siempre.
 function notifyNewRequest(data, service){
-  const addr = data.direccion + (data.localidad ? ", " + data.localidad : "");
+  const addr = formatAddress(data);
   const mapUrl = (data.lat && data.lng)
     ? `https://www.openstreetmap.org/?mlat=${data.lat}&mlon=${data.lng}#map=16/${data.lat}/${data.lng}`
     : "";
@@ -348,13 +357,12 @@ function normPhone(p){ return String(p || "").replace(/[^\d]/g, ""); }
 // TODO: pega acá la configuración de tu proyecto de Firebase
 // (Firebase console → ⚙️ Configuración del proyecto → tus apps → SDK setup and configuration).
 const FIREBASE_CONFIG = {
-  apiKey: "AIzaSyC462vHUiHf3lggIN6oJiokrHDnmmMTeR8",
-  authDomain: "velazquez-barometrica.firebaseapp.com",
-  projectId: "velazquez-barometrica",
-  storageBucket: "velazquez-barometrica.firebasestorage.app",
-  messagingSenderId: "134116231018",
-  appId: "1:134116231018:web:19f4b364c06497e97a0713",
-  measurementId: "G-KYE56SV7FK"
+  apiKey: "TU_API_KEY",
+  authDomain: "TU_PROYECTO.firebaseapp.com",
+  projectId: "TU_PROYECTO",
+  storageBucket: "TU_PROYECTO.appspot.com",
+  messagingSenderId: "TU_SENDER_ID",
+  appId: "TU_APP_ID",
 };
 
 let db = null;
@@ -720,26 +728,33 @@ function renderContractModal(){
         ${matched ? `<div class="match-banner">${ICONS.check} Hemos rellenado tus datos guardados. Revísalos y confirma.</div>` : ""}
 
         <form id="contract-form" novalidate>
-          <label class="field" id="field-nombre"><span class="label-text">Nombre</span>
-            <input class="input" id="input-nombre" value="${escapeHtml(c.nombre || "")}" />
-            <span class="error-text">Falta el nombre</span>
-          </label>
-          <label class="field" id="field-apellidos"><span class="label-text">Apellidos</span>
-            <input class="input" id="input-apellidos" value="${escapeHtml(c.apellidos || "")}" />
-            <span class="error-text">Faltan los apellidos</span>
-          </label>
           <label class="field" id="field-telefono"><span class="label-text">Teléfono</span>
             <input class="input" id="input-telefono" value="${escapeHtml(c.telefono || "")}" />
             <span class="error-text">Falta el teléfono</span>
           </label>
-          <label class="field" id="field-direccion"><span class="label-text">Dirección (calle y número)</span>
-            <input class="input" id="input-direccion" value="${escapeHtml(c.direccion || "")}" />
+          <label class="field" id="field-nombreCompleto"><span class="label-text">Nombre y apellido</span>
+            <input class="input" id="input-nombreCompleto" value="${escapeHtml([c.nombre, c.apellidos].filter(Boolean).join(" "))}" />
+            <span class="error-text">Falta el nombre y apellido</span>
+          </label>
+          <label class="field" id="field-direccion"><span class="label-text">Calle, número y apartamento</span>
+            <input class="input" id="input-direccion" placeholder="Ej. Av. Corvina Blanca 123, apto 4" value="${escapeHtml(c.direccion || "")}" />
             <span class="error-text">Falta la dirección</span>
+          </label>
+          <label class="field" id="field-codigoPostal"><span class="label-text">Código postal (opcional)</span>
+            <input class="input" id="input-codigoPostal" value="${escapeHtml(c.codigoPostal || "")}" />
+            <span class="error-text">Falta el código postal</span>
           </label>
           <label class="field" id="field-localidad"><span class="label-text">Localidad</span>
             <input class="input" id="input-localidad" placeholder="Ciudad / población" value="${escapeHtml(c.localidad || "")}" />
             <span class="error-text">Falta la localidad</span>
           </label>
+          <label class="field" id="field-departamento"><span class="label-text">Departamento</span>
+            <select class="input" id="input-departamento">
+              ${UY_DEPARTAMENTOS.map(d => `<option value="${d}" ${(c.departamento || "Maldonado") === d ? "selected" : ""}>${d}</option>`).join("")}
+            </select>
+            <span class="error-text">Falta el departamento</span>
+          </label>
+          <button type="button" class="btn-secondary" id="search-address-btn" style="margin-bottom:14px;">${ICONS.search} Buscar esta dirección en el mapa</button>
 
           <label class="field">
             <span class="label-text">Ubicación en el mapa (opcional)</span>
@@ -777,19 +792,21 @@ function attachModalListeners(){
   });
 
   initModalMap();
+  document.getElementById("search-address-btn").addEventListener("click", searchAddressOnMap);
 
   const form = document.getElementById("contract-form");
   form.addEventListener("submit", (ev) => {
     ev.preventDefault();
-    const fields = {
-      nombre: document.getElementById("input-nombre"),
-      apellidos: document.getElementById("input-apellidos"),
+    const requiredFields = {
       telefono: document.getElementById("input-telefono"),
+      nombreCompleto: document.getElementById("input-nombreCompleto"),
       direccion: document.getElementById("input-direccion"),
       localidad: document.getElementById("input-localidad"),
+      departamento: document.getElementById("input-departamento"),
     };
+    const codigoPostalInput = document.getElementById("input-codigoPostal");
     let valid = true;
-    Object.entries(fields).forEach(([key, el]) => {
+    Object.entries(requiredFields).forEach(([key, el]) => {
       const wrap = document.getElementById(`field-${key}`);
       if(!el.value.trim()){
         valid = false;
@@ -801,12 +818,17 @@ function attachModalListeners(){
       }
     });
     if(!valid) return;
+    const nombreCompleto = requiredFields.nombreCompleto.value.trim().replace(/\s+/g, " ");
+    const [primerNombre, ...resto] = nombreCompleto.split(" ");
     const data = {
-      nombre: fields.nombre.value.trim(),
-      apellidos: fields.apellidos.value.trim(),
-      telefono: fields.telefono.value.trim(),
-      direccion: fields.direccion.value.trim(),
-      localidad: fields.localidad.value.trim(),
+      nombre: primerNombre,
+      apellidos: resto.join(" "),
+      nombreCompleto,
+      telefono: requiredFields.telefono.value.trim(),
+      direccion: requiredFields.direccion.value.trim(),
+      codigoPostal: codigoPostalInput.value.trim(),
+      localidad: requiredFields.localidad.value.trim(),
+      departamento: requiredFields.departamento.value,
       lat: state.pendingMarker ? state.pendingMarker.lat : (state.clients.find(c=>c.id===state.contractModal.matchedClientId)?.lat ?? null),
       lng: state.pendingMarker ? state.pendingMarker.lng : (state.clients.find(c=>c.id===state.contractModal.matchedClientId)?.lng ?? null),
     };
@@ -861,6 +883,68 @@ function attachRedeemModalListeners(){
     redeemReward(state.redeemModal.clientId, state.redeemModal.serviceId);
   });
 }
+async function fillAddressFromCoords(lat, lng){
+  const coordsEl = document.getElementById("coords-display");
+  if(coordsEl) coordsEl.textContent = `Ubicación seleccionada: ${lat.toFixed(5)}, ${lng.toFixed(5)} — buscando la dirección…`;
+  try{
+    const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&addressdetails=1`);
+    const data = await res.json();
+    const a = data.address || {};
+    const calle = [a.road, a.house_number].filter(Boolean).join(" ");
+    const localidad = a.city || a.town || a.village || a.suburb || a.county || "";
+    const codigoPostal = a.postcode || "";
+    const departamentoRaw = a.state || "";
+    const direccionInput = document.getElementById("input-direccion");
+    const localidadInput = document.getElementById("input-localidad");
+    const codigoPostalInput = document.getElementById("input-codigoPostal");
+    const departamentoSelect = document.getElementById("input-departamento");
+    // Solo pisa el texto si el campo estaba vacío o si la persona no lo tocó a mano;
+    // así no se sobreescribe algo que ya escribieron ellos mismos con intención.
+    if(direccionInput && calle) direccionInput.value = calle;
+    if(localidadInput && localidad) localidadInput.value = localidad;
+    if(codigoPostalInput && codigoPostal) codigoPostalInput.value = codigoPostal;
+    if(departamentoSelect && departamentoRaw){
+      const match = UY_DEPARTAMENTOS.find(d => departamentoRaw.toLowerCase().includes(d.toLowerCase()));
+      if(match) departamentoSelect.value = match;
+    }
+  }catch(e){
+    // Si falla la búsqueda de dirección, no pasa nada: queda el pin igual,
+    // la persona puede escribir la dirección a mano.
+  }
+  if(coordsEl) coordsEl.textContent = `Ubicación seleccionada: ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+}
+async function searchAddressOnMap(){
+  const direccion = document.getElementById("input-direccion").value.trim();
+  const localidad = document.getElementById("input-localidad").value.trim();
+  const departamento = document.getElementById("input-departamento").value;
+  if(!direccion){ showToast("Escribí primero la dirección para poder buscarla"); return; }
+  const query = [direccion, localidad, departamento, "Uruguay"].filter(Boolean).join(", ");
+  const btn = document.getElementById("search-address-btn");
+  const originalLabel = btn.innerHTML;
+  btn.innerHTML = "Buscando…";
+  try{
+    const res = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q=${encodeURIComponent(query)}`);
+    const results = await res.json();
+    if(!results || results.length === 0){
+      showToast("No encontramos esa dirección en el mapa. Marcá el pin a mano.");
+      return;
+    }
+    const { lat, lon } = results[0];
+    const ll = { lat: parseFloat(lat), lng: parseFloat(lon) };
+    state.pendingMarker = ll;
+    if(leafletMap){
+      leafletMap.setView([ll.lat, ll.lng], 16);
+      if(leafletMarker) leafletMarker.setLatLng(ll);
+      else leafletMarker = L.marker(ll).addTo(leafletMap);
+    }
+    document.getElementById("clear-marker-btn").style.display = "inline-flex";
+    document.getElementById("coords-display").textContent = `Ubicación seleccionada: ${ll.lat.toFixed(5)}, ${ll.lng.toFixed(5)}`;
+  }catch(e){
+    showToast("No se pudo buscar la dirección. Probá marcar el pin a mano.");
+  }finally{
+    btn.innerHTML = originalLabel;
+  }
+}
 function initModalMap(){
   const el = document.getElementById("map-picker");
   if(!el || typeof L === "undefined") return;
@@ -880,8 +964,8 @@ function initModalMap(){
     state.pendingMarker = { lat: e.latlng.lat, lng: e.latlng.lng };
     if(leafletMarker) leafletMarker.setLatLng(e.latlng);
     else leafletMarker = L.marker(e.latlng).addTo(leafletMap);
-    document.getElementById("coords-display").textContent = `Ubicación seleccionada: ${e.latlng.lat.toFixed(5)}, ${e.latlng.lng.toFixed(5)}`;
     document.getElementById("clear-marker-btn").style.display = "inline-flex";
+    fillAddressFromCoords(e.latlng.lat, e.latlng.lng);
   });
   setTimeout(() => leafletMap.invalidateSize(), 120);
 
@@ -894,8 +978,8 @@ function initModalMap(){
         leafletMap.setView([ll.lat, ll.lng], 15);
         if(leafletMarker) leafletMarker.setLatLng(ll);
         else leafletMarker = L.marker(ll).addTo(leafletMap);
-        document.getElementById("coords-display").textContent = `Ubicación seleccionada: ${ll.lat.toFixed(5)}, ${ll.lng.toFixed(5)}`;
         document.getElementById("clear-marker-btn").style.display = "inline-flex";
+        fillAddressFromCoords(ll.lat, ll.lng);
       },
       () => showToast("No se pudo obtener tu ubicación")
     );
@@ -1016,7 +1100,7 @@ function renderAdminPanel(){
         ${pendingTxns.map(t => {
           const client = state.clients.find(c => c.id === t.clientId);
           if(!client) return "";
-          const addr = client.direccion + (client.localidad ? ", " + client.localidad : "");
+          const addr = formatAddress(client);
           const mapLink = (client.lat && client.lng)
             ? ` · <a href="https://www.openstreetmap.org/?mlat=${client.lat}&mlon=${client.lng}#map=16/${client.lat}/${client.lng}" target="_blank" rel="noopener">Ver en el mapa</a>`
             : "";
@@ -1056,7 +1140,7 @@ function renderAdminPanel(){
               <div style="display:flex; align-items:center; justify-content:space-between; width:100%; gap:12px;">
                 <div style="min-width:0;">
                   <div class="client-name">${escapeHtml(c.nombre)} ${escapeHtml(c.apellidos)}</div>
-                  <div class="client-meta">${escapeHtml(c.telefono)}${c.localidad ? " · " + escapeHtml(c.localidad) : ""}</div>
+                  <div class="client-meta">${escapeHtml(c.telefono)} · ${escapeHtml(formatAddress(c))}</div>
                 </div>
                 <span class="client-pts">${pts} pts</span>
               </div>
@@ -1174,7 +1258,7 @@ function renderPuntosDetail(selected){
     <div class="client-header">
       <div>
         <div class="client-header-name">${ICONS.user} ${escapeHtml(selected.nombre)} ${escapeHtml(selected.apellidos)}</div>
-        <div class="client-header-meta">${escapeHtml(selected.direccion)}${selected.localidad ? ", " + escapeHtml(selected.localidad) : ""}</div>
+        <div class="client-header-meta">${escapeHtml(formatAddress(selected))}</div>
       </div>
       <button class="btn-ghost" id="puntos-reset" style="text-decoration:underline;">Buscar otro teléfono</button>
     </div>
