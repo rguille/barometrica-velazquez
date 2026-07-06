@@ -83,10 +83,10 @@
   .bottom-navbtn{
     display:flex; flex-direction:column; align-items:center; gap:3px;
     background:none; border:none; color:var(--ink-soft); font-size:10px; font-weight:600;
-    padding:4px 10px; flex:1; max-width:110px;
+    padding:5px 10px; border-radius:12px; flex:1; max-width:110px;
   }
   .bottom-navbtn svg{width:20px; height:20px;}
-  .bottom-navbtn.active{color:var(--sea-deep);}
+  .bottom-navbtn.active{background:var(--leaf-soft); color:var(--leaf-deep);}
 
   .main{flex:1; padding:22px 18px; max-width:900px; margin:0 auto; width:100%;}
   @media (min-width:768px){ .main{padding:44px 44px;} }
@@ -380,13 +380,12 @@ function normPhone(p){ return String(p || "").replace(/[^\d]/g, ""); }
 // TODO: pega acá la configuración de tu proyecto de Firebase
 // (Firebase console → ⚙️ Configuración del proyecto → tus apps → SDK setup and configuration).
 const FIREBASE_CONFIG = {
-  apiKey: "AIzaSyC462vHUiHf3lggIN6oJiokrHDnmmMTeR8",
-  authDomain: "velazquez-barometrica.firebaseapp.com",
-  projectId: "velazquez-barometrica",
-  storageBucket: "velazquez-barometrica.firebasestorage.app",
-  messagingSenderId: "134116231018",
-  appId: "1:134116231018:web:19f4b364c06497e97a0713",
-  measurementId: "G-KYE56SV7FK"
+  apiKey: "TU_API_KEY",
+  authDomain: "TU_PROYECTO.firebaseapp.com",
+  projectId: "TU_PROYECTO",
+  storageBucket: "TU_PROYECTO.appspot.com",
+  messagingSenderId: "TU_SENDER_ID",
+  appId: "TU_APP_ID",
 };
 
 let db = null;
