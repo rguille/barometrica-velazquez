@@ -42,6 +42,7 @@
   @media (min-width:768px){ .shell{flex-direction:row;} }
 
   .sidebar{background:linear-gradient(160deg, var(--sea) 0%, var(--sea-deep) 100%); padding:18px 20px; display:flex; align-items:center; justify-content:space-between;}
+  @media (max-width:767px){ .sidebar{justify-content:center;} }
   @media (min-width:768px){ .sidebar{flex-direction:column; align-items:stretch; width:240px; justify-content:flex-start; padding:28px 22px;} }
   .brand{display:flex; align-items:center; gap:10px;}
   .brand svg{color:var(--leaf); flex-shrink:0;}
@@ -59,6 +60,7 @@
     .brand-details{display:block;}
   }
   .nav{display:flex; gap:6px;}
+  @media (max-width:767px){ .nav{display:none;} }
   @media (min-width:768px){ .nav{flex-direction:column; margin-top:36px; gap:5px;} }
   .navbtn{display:flex; align-items:center; gap:10px; padding:10px 14px; border-radius:8px; border:none; background:transparent; color:var(--on-dark); font-weight:600; font-size:14px; transition:background-color .15s ease;}
   .navbtn.active{background:rgba(111,190,68,0.18); color:#fff; font-weight:600; box-shadow:inset 3px 0 0 var(--leaf);}
@@ -70,8 +72,25 @@
   .phone-pill{display:none; align-items:center; gap:6px; color:var(--on-dark); font-weight:600; font-size:11.5px; font-family:var(--f-mono); margin-top:14px; padding-top:14px; border-top:1px solid rgba(255,255,255,.14);}
   @media (min-width:768px){ .phone-pill{display:flex;} }
 
+  .bottom-nav{
+    display:flex; justify-content:space-around; align-items:center;
+    position:fixed; left:0; right:0; bottom:0; z-index:60;
+    background:#fff; border-top:1px solid var(--line);
+    padding:6px 4px calc(6px + env(safe-area-inset-bottom, 0px));
+    box-shadow:0 -4px 14px rgba(11,46,66,.08);
+  }
+  @media (min-width:768px){ .bottom-nav{display:none;} }
+  .bottom-navbtn{
+    display:flex; flex-direction:column; align-items:center; gap:3px;
+    background:none; border:none; color:var(--ink-soft); font-size:10px; font-weight:600;
+    padding:4px 10px; flex:1; max-width:110px;
+  }
+  .bottom-navbtn svg{width:20px; height:20px;}
+  .bottom-navbtn.active{color:var(--sea-deep);}
+
   .main{flex:1; padding:22px 18px; max-width:900px; margin:0 auto; width:100%;}
   @media (min-width:768px){ .main{padding:44px 44px;} }
+  @media (max-width:767px){ .main{padding-bottom:84px;} }
 
   .eyebrow{color:var(--leaf-deep); font-family:var(--f-mono); font-size:11.5px; letter-spacing:.08em; text-transform:uppercase; margin-bottom:6px;}
   h1.title{font-family:var(--f-display); font-size:29px; font-weight:700; margin:0; color:var(--sea-deep);}
@@ -196,6 +215,7 @@
   .setup-banner{background:#FCEFC7; color:#6B4E00; font-size:12.5px; padding:9px 16px; display:flex; align-items:center; gap:8px; justify-content:center; text-align:center; flex-wrap:wrap;}
   .setup-banner code{background:rgba(0,0,0,0.08); padding:1px 5px; border-radius:4px; font-family:var(--f-mono);}
   .filete{background:var(--sea-deep); color:var(--on-dark-soft); padding:12px 20px; font-size:12px; display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:8px; text-align:center; border-top:3px solid var(--leaf);}
+  @media (max-width:767px){ .filete{margin-bottom:64px;} }
   @media (min-width:768px){ .filete{justify-content:flex-start; padding-left:44px;} }
   .filete-name{font-weight:700; color:#fff;}
   .filete-sep{opacity:.5;}
@@ -298,7 +318,10 @@ function formatAddress(c){
   return parts.length ? parts.join(", ") : "sin dirección registrada";
 }
 function buildWhatsAppMessage(client, service){
-  return `Hola ${client.nombre}, te escribimos de Velázquez Barométrica para coordinar el día y la hora de tu servicio de ${service.nombre.toLowerCase()}. Tenemos registrada tu dirección como: ${formatAddress(client)}. ¿Qué disponibilidad tenés?`;
+  const mapLine = (client.lat && client.lng)
+    ? `\nUbicación: https://www.openstreetmap.org/?mlat=${client.lat}&mlon=${client.lng}#map=16/${client.lat}/${client.lng}`
+    : "";
+  return `Hola ${client.nombre}, te escribimos de Velázquez Barométrica para coordinar el día y la hora de tu servicio de ${service.nombre.toLowerCase()}. Tenemos registrada tu dirección como: ${formatAddress(client)}.${mapLine}\n¿Qué disponibilidad tenés?`;
 }
 function buildNewRequestMessage(data, service){
   const mapLine = (data.lat && data.lng)
@@ -357,13 +380,12 @@ function normPhone(p){ return String(p || "").replace(/[^\d]/g, ""); }
 // TODO: pega acá la configuración de tu proyecto de Firebase
 // (Firebase console → ⚙️ Configuración del proyecto → tus apps → SDK setup and configuration).
 const FIREBASE_CONFIG = {
-  apiKey: "AIzaSyC462vHUiHf3lggIN6oJiokrHDnmmMTeR8",
-  authDomain: "velazquez-barometrica.firebaseapp.com",
-  projectId: "velazquez-barometrica",
-  storageBucket: "velazquez-barometrica.firebasestorage.app",
-  messagingSenderId: "134116231018",
-  appId: "1:134116231018:web:19f4b364c06497e97a0713",
-  measurementId: "G-KYE56SV7FK"
+  apiKey: "TU_API_KEY",
+  authDomain: "TU_PROYECTO.firebaseapp.com",
+  projectId: "TU_PROYECTO",
+  storageBucket: "TU_PROYECTO.appspot.com",
+  messagingSenderId: "TU_SENDER_ID",
+  appId: "TU_APP_ID",
 };
 
 let db = null;
@@ -558,6 +580,7 @@ function render(){
       </div>
       ${renderFooter()}
     </div>
+    ${renderBottomNav()}
     ${state.contractModal ? renderContractModal() : ""}
     ${state.redeemModal ? renderRedeemModal() : ""}
   `;
@@ -598,13 +621,14 @@ function renderFooter(){
     </footer>
   `;
 }
+const NAV_ITEMS = [
+  { key:"contratar", label:"Contratar", icon:"truck" },
+  { key:"puntos", label:"Mis puntos", icon:"gauge" },
+  { key:"faq", label:"Puntos y premios", icon:"help" },
+  { key:"admin", label:"Panel interno", icon:"lock" },
+];
 function renderSidebar(){
-  const items = [
-    { key:"contratar", label:"Contratar", icon:"truck" },
-    { key:"puntos", label:"Mis puntos", icon:"gauge" },
-    { key:"faq", label:"Puntos y premios", icon:"help" },
-    { key:"admin", label:"Panel interno", icon:"lock" },
-  ];
+  const items = NAV_ITEMS;
   return `
     <aside class="sidebar">
       <div class="brand">
@@ -626,6 +650,17 @@ function renderSidebar(){
       <div class="sidebar-footnote">Los puntos caducan 12 meses después de cada servicio.</div>
       <div class="phone-pill">${ICONS.phone} 095 143 777</div>
     </aside>
+  `;
+}
+function renderBottomNav(){
+  return `
+    <nav class="bottom-nav">
+      ${NAV_ITEMS.map(i => `
+        <button class="bottom-navbtn ${state.view === i.key ? "active" : ""}" data-nav="${i.key}">
+          ${ICONS[i.icon]}<span>${i.label}</span>
+        </button>
+      `).join("")}
+    </nav>
   `;
 }
 function attachNavListeners(){
@@ -1135,7 +1170,7 @@ function renderAdminPanel(){
           const contactService = lastTxn ? state.catalog.find(s => s.id === lastTxn.serviceId) : null;
           const waUrl = contactService
             ? whatsappUrl(toWhatsAppNumber(c.telefono), buildWhatsAppMessage(c, contactService))
-            : whatsappUrl(toWhatsAppNumber(c.telefono), `Hola ${c.nombre}, te escribimos de Velázquez Barométrica.`);
+            : whatsappUrl(toWhatsAppNumber(c.telefono), `Hola ${c.nombre}, te escribimos de Velázquez Barométrica. Tenemos registrada tu dirección como: ${formatAddress(c)}.${(c.lat && c.lng) ? `\nUbicación: https://www.openstreetmap.org/?mlat=${c.lat}&mlon=${c.lng}#map=16/${c.lat}/${c.lng}` : ""}`);
           return `
             <li class="client-item" style="cursor:default; align-items:flex-start; flex-direction:column; gap:8px;" data-search="${escapeHtml(searchBlob)}">
               <div style="display:flex; align-items:center; justify-content:space-between; width:100%; gap:12px;">
