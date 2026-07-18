@@ -364,7 +364,13 @@ function zonaParaLocalidad(localidad){
 }
 // Convierte lo que se pega desde geojson.io (FeatureCollection, Feature, o geometría suelta)
 // en un arreglo de [lat,lng]. Devuelve null si no encuentra un polígono válido.
-function parseGeoJsonPolygon(texto){
+function anilloAPuntos(anillo){
+  let puntos = anillo.map(p => [p[1], p[0]]);
+  const primero = puntos[0], ultimo = puntos[puntos.length - 1];
+  if(puntos.length > 3 && primero[0] === ultimo[0] && primero[1] === ultimo[1]) puntos = puntos.slice(0, -1);
+  return puntos;
+}
+function parseGeoJsonZonas(texto){
   // Limpieza: sacamos espacios, comillas raras, y si alguien pegó el texto
   // envuelto en ``` (como si fuera un bloque de código).
   let limpio = (texto || "").trim().replace(/^```(json)?/i, "").replace(/```$/, "").trim();
@@ -372,41 +378,40 @@ function parseGeoJsonPolygon(texto){
   let data;
   try{ data = JSON.parse(limpio); }catch(e){ return { error: "json_invalido" }; }
 
-  // Junta TODOS los anillos de polígono que encuentre (puede haber más de una
-  // figura guardada, por ejemplo si quedó un punto suelto de alguna prueba) y
-  // se queda con el que tenga más puntos, que suele ser la zona real.
-  const geometries = [];
-  const recolectar = (geom) => {
+  // Junta CADA polígono que encuentre como una zona separada (un archivo de
+  // geojson.io puede traer varias figuras guardadas juntas), con su nombre y
+  // precio si vienen en las propiedades de la figura.
+  const zonas = [];
+  const recolectar = (geom, props) => {
     if(!geom) return;
-    if(geom.type === "Polygon" && geom.coordinates && geom.coordinates[0]) geometries.push(geom.coordinates[0]);
+    const nombre = props && (props.nombre || props.name || props.Name) || null;
+    const precio = props && (props.precio || props.price) != null ? Number(props.precio || props.price) : null;
+    if(geom.type === "Polygon" && geom.coordinates && geom.coordinates[0] && geom.coordinates[0].length >= 3){
+      zonas.push({ puntos: anilloAPuntos(geom.coordinates[0]), nombre, precio });
+    }
     if(geom.type === "MultiPolygon" && geom.coordinates){
-      geom.coordinates.forEach(poly => { if(poly && poly[0]) geometries.push(poly[0]); });
+      geom.coordinates.forEach(poly => {
+        if(poly && poly[0] && poly[0].length >= 3) zonas.push({ puntos: anilloAPuntos(poly[0]), nombre, precio });
+      });
     }
   };
   if(data.type === "FeatureCollection"){
-    (data.features || []).forEach(f => f && recolectar(f.geometry));
+    (data.features || []).forEach(f => f && recolectar(f.geometry, f.properties));
   }else if(data.type === "Feature"){
-    recolectar(data.geometry);
+    recolectar(data.geometry, data.properties);
   }else if(data.type === "Polygon" || data.type === "MultiPolygon"){
-    recolectar(data);
+    recolectar(data, null);
   }else if(data.geometry){
-    recolectar(data.geometry);
+    recolectar(data.geometry, data.properties);
   }else if(Array.isArray(data.coordinates)){
-    recolectar(data);
+    recolectar(data, null);
   }else if(Array.isArray(data) && Array.isArray(data[0]) && typeof data[0][0] === "number"){
     // Por si alguien pega directamente un anillo de coordenadas [[lng,lat],...]
-    geometries.push(data);
+    zonas.push({ puntos: anilloAPuntos(data), nombre: null, precio: null });
   }
 
-  if(geometries.length === 0) return { error: "sin_poligono" };
-  const anillo = geometries.reduce((mejor, actual) => actual.length > mejor.length ? actual : mejor, geometries[0]);
-  if(!anillo || anillo.length < 3) return { error: "pocos_puntos" };
-
-  let puntos = anillo.map(p => [p[1], p[0]]);
-  // El primer y último punto suelen repetirse para cerrar el polígono: sacamos el duplicado.
-  const primero = puntos[0], ultimo = puntos[puntos.length - 1];
-  if(puntos.length > 3 && primero[0] === ultimo[0] && primero[1] === ultimo[1]) puntos = puntos.slice(0, -1);
-  return { puntos };
+  if(zonas.length === 0) return { error: "sin_poligono" };
+  return { zonas };
 }
 function geoJsonErrorMessage(codigo){
   const msgs = {
@@ -527,13 +532,13 @@ function normPhone(p){ return String(p || "").replace(/[^\d]/g, ""); }
 // TODO: pega acá la configuración de tu proyecto de Firebase
 // (Firebase console → ⚙️ Configuración del proyecto → tus apps → SDK setup and configuration).
 const FIREBASE_CONFIG = {
- apiKey: "AIzaSyC462vHUiHf3lggIN6oJiokrHDnmmMTeR8",
-  authDomain: "velazquez-barometrica.firebaseapp.com",
-  projectId: "velazquez-barometrica",
-  storageBucket: "velazquez-barometrica.firebasestorage.app",
-  messagingSenderId: "134116231018",
-  appId: "1:134116231018:web:19f4b364c06497e97a0713",
-  measurementId: "G-KYE56SV7FK"
+	apiKey: "AIzaSyC462vHUiHf3lggIN6oJiokrHDnmmMTeR8",
+	authDomain: "velazquez-barometrica.firebaseapp.com",
+	projectId: "velazquez-barometrica",
+	storageBucket: "velazquez-barometrica.firebasestorage.app",
+	messagingSenderId: "134116231018",
+	appId: "1:134116231018:web:19f4b364c06497e97a0713",
+	measurementId: "G-KYE56SV7FK"
 };
 
 let db = null;
@@ -585,6 +590,7 @@ let state = {
   adminTab: "solicitudes",  // "solicitudes" | "clientes" | "zonas"
   zoneDrawing: null,        // { puntos:[[lat,lng],...] } mientras se dibuja una zona nueva
   zoneImportOpen: false,    // muestra el cuadro para pegar el GeoJSON de geojson.io
+  zoneImportQueue: [],      // zonas que faltan revisar/guardar cuando se importan varias juntas
   zoneLocalidadOpen: false, // muestra el formulario de zona por localidad (sin mapa)
   redeemModal: null,        // { clientId, serviceId }
 };
@@ -1619,13 +1625,14 @@ function renderZonesSection(){
     ` : ""}
     ${finalizing ? `
       <form id="zone-form" class="card" style="padding:16px; margin-bottom:20px;">
+        ${state.zoneImportQueue.length > 0 ? `<p class="zone-hint" style="margin-top:0;">Después de guardar esta zona, seguimos con ${state.zoneImportQueue.length === 1 ? "la última que falta" : `las ${state.zoneImportQueue.length} que faltan`} del archivo importado.</p>` : ""}
         <label class="field"><span class="label-text">Nombre de la zona</span>
-          <input class="input" id="zone-name-input" placeholder="Ej: Centro de Maldonado" required />
+          <input class="input" id="zone-name-input" placeholder="Ej: Centro de Maldonado" value="${escapeHtml(drawing.nombre || "")}" required />
         </label>
         <div class="zone-price-grid">
           ${state.catalog.map(s => `
             <label class="field" style="margin-bottom:0;"><span class="label-text">${escapeHtml(s.nombre)}</span>
-              <input class="input" type="number" min="0" step="1" placeholder="$" data-zone-price="${s.id}" />
+              <input class="input" type="number" min="0" step="1" placeholder="$" value="${drawing.precio != null ? drawing.precio : ""}" data-zone-price="${s.id}" />
             </label>
           `).join("")}
         </div>
@@ -1770,10 +1777,13 @@ function attachZonesListeners(){
     importCancelBtn.addEventListener("click", () => { state.zoneImportOpen = false; render(); });
   }
   function tryLoadGeoJson(texto){
-    const { puntos, error } = parseGeoJsonPolygon(texto);
+    const { zonas, error } = parseGeoJsonZonas(texto);
     if(error){ showToast(geoJsonErrorMessage(error)); return; }
     state.zoneImportOpen = false;
-    state.zoneDrawing = { puntos, finalizing: true };
+    state.zoneImportQueue = zonas.slice(1);
+    const primera = zonas[0];
+    state.zoneDrawing = { puntos: primera.puntos, finalizing: true, nombre: primera.nombre, precio: primera.precio };
+    if(zonas.length > 1) showToast(`Encontramos ${zonas.length} zonas en el archivo. Vamos a revisarlas una por una.`);
     render();
   }
   const importLoadBtn = document.getElementById("zone-import-load");
@@ -1825,7 +1835,7 @@ function attachZonesListeners(){
   }
   const cancelBtn = document.getElementById("zone-draw-cancel");
   if(cancelBtn){
-    cancelBtn.addEventListener("click", () => { state.zoneDrawing = null; render(); });
+    cancelBtn.addEventListener("click", () => { state.zoneDrawing = null; state.zoneImportQueue = []; render(); });
   }
   const undoBtn = document.getElementById("zone-draw-undo");
   if(undoBtn){
@@ -1845,7 +1855,7 @@ function attachZonesListeners(){
   }
   const formCancelBtn = document.getElementById("zone-form-cancel");
   if(formCancelBtn){
-    formCancelBtn.addEventListener("click", () => { state.zoneDrawing = null; render(); });
+    formCancelBtn.addEventListener("click", () => { state.zoneDrawing = null; state.zoneImportQueue = []; render(); });
   }
   const zoneForm = document.getElementById("zone-form");
   if(zoneForm){
@@ -1867,8 +1877,15 @@ function attachZonesListeners(){
       };
       state.zones = [...state.zones, zone];
       await saveKey("zones", state.zones);
-      state.zoneDrawing = null;
-      showToast("Zona guardada");
+      if(state.zoneImportQueue.length > 0){
+        const siguiente = state.zoneImportQueue[0];
+        state.zoneImportQueue = state.zoneImportQueue.slice(1);
+        state.zoneDrawing = { puntos: siguiente.puntos, finalizing: true, nombre: siguiente.nombre, precio: siguiente.precio };
+        showToast("Zona guardada — sigue la próxima");
+      }else{
+        state.zoneDrawing = null;
+        showToast("Zona guardada");
+      }
       render();
     });
   }
