@@ -370,25 +370,34 @@ function parseGeoJsonPolygon(texto){
   let data;
   try{ data = JSON.parse(limpio); }catch(e){ return { error: "json_invalido" }; }
 
-  let geometry = null;
+  // Junta TODOS los anillos de polígono que encuentre (puede haber más de una
+  // figura guardada, por ejemplo si quedó un punto suelto de alguna prueba) y
+  // se queda con el que tenga más puntos, que suele ser la zona real.
+  const geometries = [];
+  const recolectar = (geom) => {
+    if(!geom) return;
+    if(geom.type === "Polygon" && geom.coordinates && geom.coordinates[0]) geometries.push(geom.coordinates[0]);
+    if(geom.type === "MultiPolygon" && geom.coordinates){
+      geom.coordinates.forEach(poly => { if(poly && poly[0]) geometries.push(poly[0]); });
+    }
+  };
   if(data.type === "FeatureCollection"){
-    const feat = (data.features || []).find(f => f && f.geometry && (f.geometry.type === "Polygon" || f.geometry.type === "MultiPolygon"));
-    geometry = feat ? feat.geometry : null;
+    (data.features || []).forEach(f => f && recolectar(f.geometry));
   }else if(data.type === "Feature"){
-    geometry = data.geometry;
+    recolectar(data.geometry);
   }else if(data.type === "Polygon" || data.type === "MultiPolygon"){
-    geometry = data;
-  }else if(data.geometry && data.geometry.coordinates){
-    geometry = data.geometry;
+    recolectar(data);
+  }else if(data.geometry){
+    recolectar(data.geometry);
   }else if(Array.isArray(data.coordinates)){
-    geometry = data;
+    recolectar(data);
   }else if(Array.isArray(data) && Array.isArray(data[0]) && typeof data[0][0] === "number"){
     // Por si alguien pega directamente un anillo de coordenadas [[lng,lat],...]
-    geometry = { type: "Polygon", coordinates: [data] };
+    geometries.push(data);
   }
 
-  if(!geometry || !geometry.coordinates) return { error: "sin_poligono" };
-  const anillo = geometry.type === "MultiPolygon" ? geometry.coordinates[0][0] : geometry.coordinates[0];
+  if(geometries.length === 0) return { error: "sin_poligono" };
+  const anillo = geometries.reduce((mejor, actual) => actual.length > mejor.length ? actual : mejor, geometries[0]);
   if(!anillo || anillo.length < 3) return { error: "pocos_puntos" };
 
   let puntos = anillo.map(p => [p[1], p[0]]);
@@ -401,8 +410,8 @@ function geoJsonErrorMessage(codigo){
   const msgs = {
     vacio: "Pegá primero el texto de geojson.io, o elegí el archivo descargado.",
     json_invalido: "Ese texto no es JSON válido — revisá que hayas copiado todo, desde la primera { hasta la última }.",
-    sin_poligono: "El JSON es válido, pero no encontramos ningún polígono adentro.",
-    pocos_puntos: "El polígono encontrado tiene muy pocos puntos.",
+    sin_poligono: "El JSON es válido, pero no encontramos ningún polígono adentro. En geojson.io, asegurate de haber usado la herramienta de polígono (no la de línea o punto).",
+    pocos_puntos: "El polígono encontrado tiene menos de 3 puntos. Volvé a geojson.io y dibujá la zona con la herramienta de polígono, marcando al menos 3 vértices.",
   };
   return msgs[codigo] || "No pudimos leer ese archivo.";
 }
@@ -513,13 +522,12 @@ function normPhone(p){ return String(p || "").replace(/[^\d]/g, ""); }
 // TODO: pega acá la configuración de tu proyecto de Firebase
 // (Firebase console → ⚙️ Configuración del proyecto → tus apps → SDK setup and configuration).
 const FIREBASE_CONFIG = {
-  apiKey: "AIzaSyC462vHUiHf3lggIN6oJiokrHDnmmMTeR8",
-  authDomain: "velazquez-barometrica.firebaseapp.com",
-  projectId: "velazquez-barometrica",
-  storageBucket: "velazquez-barometrica.firebasestorage.app",
-  messagingSenderId: "134116231018",
-  appId: "1:134116231018:web:19f4b364c06497e97a0713",
-  measurementId: "G-KYE56SV7FK"
+  apiKey: "TU_API_KEY",
+  authDomain: "TU_PROYECTO.firebaseapp.com",
+  projectId: "TU_PROYECTO",
+  storageBucket: "TU_PROYECTO.appspot.com",
+  messagingSenderId: "TU_SENDER_ID",
+  appId: "TU_APP_ID",
 };
 
 let db = null;
