@@ -322,27 +322,21 @@
 /* ---------------- constants & helpers ---------------- */
 const MESES = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
 const DEFAULT_CATALOG = [
-  // TODO: ajusta los puntos y los precios por departamento de cada servicio.
-  // Los departamentos que no tengan precio cargado muestran "Precio a coordinar"
-  // y no permiten pagar online — la solicitud igual se puede hacer sin pagar.
-  { id: "s1", nombre: "Agua potable", puntos: 100, precios: {
-    "Maldonado": 1200, "Rocha": 1500, "Lavalleja": 1500, "Canelones": 1400, "San José": 1400,
-  }},
-  { id: "s2", nombre: "Aspirado de pozo", puntos: 100, precios: {
-    "Maldonado": 1300, "Rocha": 1600, "Lavalleja": 1600, "Canelones": 1500, "San José": 1500,
-  }},
-  { id: "s3", nombre: "Aspirado de grasera", puntos: 90, precios: {
-    "Maldonado": 1100, "Rocha": 1400, "Lavalleja": 1400, "Canelones": 1300, "San José": 1300,
-  }},
-  { id: "s4", nombre: "Desobstrucción", puntos: 80, precios: {
-    "Maldonado": 900, "Rocha": 1200, "Lavalleja": 1200, "Canelones": 1100, "San José": 1100,
-  }},
+  // "puntos" ahora es solo un valor de respaldo, para cuando todavía no se sabe
+  // el precio (zona sin cargar). Cuando SÍ hay precio, los puntos se calculan
+  // solos como el POINTS_PERCENT del precio (ver puntosGanados más abajo).
+  { id: "s1", nombre: "Agua potable", puntos: 100 },
+  { id: "s2", nombre: "Aspirado de pozo", puntos: 100 },
+  { id: "s3", nombre: "Aspirado de grasera", puntos: 90 },
+  { id: "s4", nombre: "Desobstrucción", puntos: 80 },
 ];
+// TODO: ajustá qué porcentaje del precio se convierte en puntos (0.02 = 2%).
+const POINTS_PERCENT = 0.02;
+function puntosGanados(service, price){
+  return price != null ? Math.round(price * POINTS_PERCENT) : service.puntos;
+}
 // TODO: ajustá cuánto vale 1 punto en pesos uruguayos a la hora de pagar con puntos.
 const POINTS_VALUE_UYU = 5;
-function priceFor(service, departamento){
-  return (service.precios && service.precios[departamento] != null) ? service.precios[departamento] : null;
-}
 // ---- Zonas dibujadas a mano en el mapa (precio por zona) ----
 function puntoEnPoligono(lat, lng, puntos){
   // Algoritmo de ray-casting clásico. "puntos" es un arreglo de [lat,lng].
@@ -359,6 +353,14 @@ function puntoEnPoligono(lat, lng, puntos){
 function zonaParaCoordenadas(lat, lng){
   if(lat == null || lng == null) return null;
   return state.zones.find(z => z.puntos && z.puntos.length >= 3 && puntoEnPoligono(lat, lng, z.puntos)) || null;
+}
+function normalizarTexto(s){
+  return (s || "").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+function zonaParaLocalidad(localidad){
+  if(!localidad) return null;
+  const norm = normalizarTexto(localidad);
+  return state.zones.find(z => z.localidades && z.localidades.some(l => normalizarTexto(l) === norm)) || null;
 }
 // Convierte lo que se pega desde geojson.io (FeatureCollection, Feature, o geometría suelta)
 // en un arreglo de [lat,lng]. Devuelve null si no encuentra un polígono válido.
@@ -417,11 +419,14 @@ function geoJsonErrorMessage(codigo){
 }
 const DEFAULT_CENTER = [-34.9011, -54.9585]; // Maldonado, Uruguay
 const DEFAULT_ZOOM = 10;
-const UY_DEPARTAMENTOS = [
-  "Artigas","Canelones","Cerro Largo","Colonia","Durazno","Flores","Florida",
-  "Lavalleja","Maldonado","Montevideo","Paysandú","Río Negro","Rivera","Rocha",
-  "Salto","San José","Soriano","Tacuarembó","Treinta y Tres",
+// TODO: ajustá esta lista con las localidades donde realmente trabajás.
+// "Otra localidad" siempre queda como opción por si falta alguna en la lista.
+const UY_LOCALIDADES = [
+  "Maldonado", "Punta del Este", "San Carlos", "Piriápolis", "Pan de Azúcar",
+  "La Barra", "Manantiales", "José Ignacio", "Garzón", "Aiguá",
+  "Punta Ballena", "Solís Grande", "Gregorio Aznárez", "Maldonado Nuevo",
 ];
+const OTRA_LOCALIDAD = "__otra__";
 const REWARD_MULTIPLIER = 3; // puntos para un servicio gratis = puntos del servicio x este número
 const ADMIN_PIN = "2468"; // TODO: cambia este PIN interno antes de usarlo con clientes reales.
 
@@ -522,13 +527,12 @@ function normPhone(p){ return String(p || "").replace(/[^\d]/g, ""); }
 // TODO: pega acá la configuración de tu proyecto de Firebase
 // (Firebase console → ⚙️ Configuración del proyecto → tus apps → SDK setup and configuration).
 const FIREBASE_CONFIG = {
-  apiKey: "AIzaSyC462vHUiHf3lggIN6oJiokrHDnmmMTeR8",
-authDomain: "velazquez-barometrica.firebaseapp.com",
-projectId: "velazquez-barometrica",
-storageBucket: "velazquez-barometrica.firebasestorage.app",
-messagingSenderId: "134116231018",
-appId: "1:134116231018:web:19f4b364c06497e97a0713",
-measurementId: "G-KYE56SV7FK"
+  apiKey: "TU_API_KEY",
+  authDomain: "TU_PROYECTO.firebaseapp.com",
+  projectId: "TU_PROYECTO",
+  storageBucket: "TU_PROYECTO.appspot.com",
+  messagingSenderId: "TU_SENDER_ID",
+  appId: "TU_APP_ID",
 };
 
 let db = null;
@@ -580,6 +584,7 @@ let state = {
   adminTab: "solicitudes",  // "solicitudes" | "clientes" | "zonas"
   zoneDrawing: null,        // { puntos:[[lat,lng],...] } mientras se dibuja una zona nueva
   zoneImportOpen: false,    // muestra el cuadro para pegar el GeoJSON de geojson.io
+  zoneLocalidadOpen: false, // muestra el formulario de zona por localidad (sin mapa)
   redeemModal: null,        // { clientId, serviceId }
 };
 let leafletMap = null;
@@ -635,7 +640,7 @@ function findClientByPhone(phone){
   if(!n) return null;
   return state.clients.find(c => normPhone(c.telefono) === n) || null;
 }
-async function confirmContract(serviceId, data, payment){
+async function confirmContract(serviceId, data, payment, precioZona){
   const service = state.catalog.find(s => s.id === serviceId);
   if(!service) return;
   let client = findClientByPhone(data.telefono);
@@ -650,27 +655,20 @@ async function confirmContract(serviceId, data, payment){
 
   const date = new Date().toISOString();
   const pagoEstado = !payment ? "sin pago" : (payment.remaining === 0 ? "pagado" : "pendiente_mp");
-  // Queda "pendiente" y sin puntos: los puntos se suman a mano desde el Panel
-  // interno recién cuando el servicio se realizó de verdad. El pago (si lo hay)
-  // es independiente de eso.
+  // Queda "pendiente" y sin puntos todavía: los puntos se suman a mano desde el
+  // Panel interno recién cuando el servicio se realizó de verdad. La cantidad
+  // ya queda calculada acá (2% del precio de zona, o el valor de respaldo del
+  // catálogo si no había precio cargado), así no cambia si el precio se edita después.
   const txn = {
     id: uid(), clientId: client.id, serviceId: service.id, serviceName: service.nombre,
-    puntosServicio: service.puntos, puntos: 0, status: "pendiente",
+    puntosServicio: puntosGanados(service, precioZona), puntos: 0, status: "pendiente",
     date, completedAt: null, expiresAt: null,
-    precio: payment ? payment.price : null,
+    precio: precioZona != null ? precioZona : null,
     pagoMonto: payment ? payment.remaining : 0,
-    pagoPuntos: payment ? payment.pointsToUse : 0,
+    pagoPuntos: 0,
     pagoEstado,
   };
   state.transactions = [txn, ...state.transactions];
-
-  if(payment && payment.pointsToUse > 0){
-    const redeemTxn = {
-      id: uid(), clientId: client.id, serviceId: service.id, serviceName: `${service.nombre} (pago con puntos)`,
-      puntos: -payment.pointsToUse, type: "redeem", date, expiresAt: "9999-12-31T00:00:00.000Z",
-    };
-    state.transactions = [redeemTxn, ...state.transactions];
-  }
   await saveKey("transactions", state.transactions);
 
   state.pendingMarker = null;
@@ -694,14 +692,20 @@ async function redirectToMercadoPago(client, service, monto, referenciaId){
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        // El servidor recalcula el precio con los datos que ya guardó al crear
+        // la solicitud (no con lo que mandemos acá), así que solo necesita
+        // saber cuál solicitud es. "monto" viaja para que el servidor lo
+        // compare contra el precio real y rechace si no coincide.
         titulo: `${service.nombre} — Velázquez Barométrica`,
         monto,
         referencia: referenciaId,
-        cliente: { nombre: client.nombre, apellidos: client.apellidos, telefono: client.telefono },
       }),
     });
     const result = await res.json();
-    if(!res.ok || !result.init_point) return false;
+    if(!res.ok || !result.init_point){
+      if(result && result.error) showToast(typeof result.error === "string" ? result.error : "No se pudo validar el pago.");
+      return false;
+    }
     window.location.href = result.init_point;
     return true;
   }catch(e){
@@ -906,16 +910,13 @@ function renderView(){
 /* ---------------- CONTRATAR ---------------- */
 function renderContratarView(){
   return `
-    ${sectionHeader("Nuestros servicios", "Contrata un servicio", "Elige el servicio que necesitas. Al confirmar, te pediremos tus datos de contacto para registrar la contratación y sumar los puntos.")}
+    ${sectionHeader("Nuestros servicios", "Contrata un servicio", "Elige el servicio que necesitas. Al confirmar, te pediremos tus datos de contacto para registrar la contratación.")}
     <div class="service-grid">
       ${state.catalog.map(s => `
         <div class="service-card">
           <div class="service-row">
             <span class="service-name">${escapeHtml(s.nombre)}</span>
             ${ICONS.droplet}
-          </div>
-          <div class="service-row">
-            <span class="service-pts">+${s.puntos} pts</span>
           </div>
           <button class="btn-contract" data-contract="${s.id}">${ICONS.truck} Contratar</button>
         </div>
@@ -935,25 +936,20 @@ function attachContratarListeners(){
 
 /* ---------------- MODAL: contratar + registro ---------------- */
 /* ---------------- pago opcional al contratar ---------------- */
-function computePaymentInfo(departamento){
+function computePaymentInfo(localidad){
   const service = state.catalog.find(s => s.id === state.contractModal.serviceId);
   const clientId = state.contractModal.matchedClientId;
   const coords = state.pendingMarker || (clientId ? (() => {
     const c = state.clients.find(cl => cl.id === clientId);
     return (c && c.lat && c.lng) ? { lat: c.lat, lng: c.lng } : null;
   })() : null);
-  const zona = coords ? zonaParaCoordenadas(coords.lat, coords.lng) : null;
-  let price = null;
-  if(zona && zona.precios && zona.precios[service.id] != null){
-    price = zona.precios[service.id];
-  }else{
-    price = priceFor(service, departamento);
-  }
+  const zona = (coords ? zonaParaCoordenadas(coords.lat, coords.lng) : null) || zonaParaLocalidad(localidad);
+  const price = (zona && zona.precios && zona.precios[service.id] != null) ? zona.precios[service.id] : null;
   const availablePoints = clientId ? activePointsFor(clientId) : 0;
   return { service, price, availablePoints, zona, tieneCoords: !!coords };
 }
-function renderPaymentSection(departamento){
-  const { price, availablePoints, zona, tieneCoords } = computePaymentInfo(departamento);
+function renderPaymentSection(localidad){
+  const { service, price, zona, tieneCoords } = computePaymentInfo(localidad);
   const pm = state.contractModal;
   if(price == null){
     return `
@@ -961,18 +957,13 @@ function renderPaymentSection(departamento){
         <span class="payment-title">${ICONS.card} Pago</span>
         <p class="payment-note" style="margin-top:6px; margin-bottom:0;">
           ${tieneCoords
-            ? `Todavía no tenemos un precio cargado para esa zona ni para ${escapeHtml(departamento)}. Podés continuar igual — coordinamos el precio cuando te contactemos.`
-            : `Marcá tu ubicación en el mapa de abajo para ver el precio de tu zona, o continuá igual — coordinamos el precio cuando te contactemos.`}
+            ? `Todavía no tenemos un precio cargado para esa zona. Podés continuar igual — coordinamos el precio cuando te contactemos.`
+            : `Marcá tu ubicación en el mapa de abajo, o elegí tu localidad, para ver el precio de tu zona. También podés continuar igual — coordinamos el precio cuando te contactemos.`}
         </p>
       </div>
     `;
   }
-  const canUsePoints = availablePoints > 0;
-  const maxPointsUsable = Math.min(availablePoints, Math.ceil(price / POINTS_VALUE_UYU));
-  const pointsToUse = pm.payMethod === "dinero" ? 0 : Math.min(pm.pointsToUse || 0, maxPointsUsable);
-  const discount = pointsToUse * POINTS_VALUE_UYU;
-  const remaining = Math.max(0, price - discount);
-
+  const ganados = puntosGanados(service, price);
   return `
     <div class="payment-box">
       <div class="payment-head">
@@ -980,45 +971,35 @@ function renderPaymentSection(departamento){
         <span class="payment-price">$${price.toLocaleString("es-UY")}</span>
       </div>
       ${zona
-        ? `<p class="payment-note" style="margin-bottom:6px;">Precio para la zona <strong>${escapeHtml(zona.nombre)}</strong>, según tu ubicación en el mapa.</p>`
-        : `<p class="payment-note">Podés pagar ahora o dejarlo pendiente y coordinarlo cuando te contactemos.</p>`}
+        ? `<p class="payment-note" style="margin-bottom:2px;">Precio para la zona <strong>${escapeHtml(zona.nombre)}</strong>, según tu ubicación en el mapa.</p>`
+        : `<p class="payment-note" style="margin-bottom:2px;">Podés pagar ahora o dejarlo pendiente y coordinarlo cuando te contactemos.</p>`}
+      <p class="payment-note" style="margin-bottom:6px;">Vas a sumar <strong style="color:var(--leaf-deep);">${ganados} pts</strong> cuando se realice el servicio.</p>
       <div class="pay-toggle-row">
         <button type="button" class="pay-toggle-btn ${!pm.payNow ? "active" : ""}" data-paynow="0">Pagar después</button>
         <button type="button" class="pay-toggle-btn ${pm.payNow ? "active" : ""}" data-paynow="1">Pagar ahora</button>
       </div>
       ${pm.payNow ? `
-        <div class="pay-method-grid">
-          <button type="button" class="pay-method-btn ${pm.payMethod==="dinero"?"active":""}" data-method="dinero">Solo dinero</button>
-          <button type="button" class="pay-method-btn ${pm.payMethod==="mixto"?"active":""}" data-method="mixto" ${!canUsePoints?"disabled":""}>Dinero + puntos</button>
-          <button type="button" class="pay-method-btn ${pm.payMethod==="puntos"?"active":""}" data-method="puntos" ${(!canUsePoints || maxPointsUsable*POINTS_VALUE_UYU < price)?"disabled":""}>Solo puntos</button>
-        </div>
-        ${pm.payMethod !== "dinero" ? `
-          <div class="points-slider-row">
-            <input type="range" id="points-range" min="0" max="${maxPointsUsable}" value="${pointsToUse}" />
-            <span style="font-family:var(--f-mono); font-size:12px; white-space:nowrap;">${pointsToUse} pts</span>
-          </div>
-        ` : ""}
-        <div class="pay-summary">
-          <span>Precio del servicio: <strong>$${price.toLocaleString("es-UY")}</strong></span>
-          ${discount > 0 ? `<span>Descuento por puntos: <strong>-$${discount.toLocaleString("es-UY")}</strong></span>` : ""}
-          <span>Total a pagar ahora: <strong>${remaining === 0 ? "Cubierto con puntos" : "$" + remaining.toLocaleString("es-UY")}</strong></span>
-          ${canUsePoints ? `<span style="font-size:11px;">Tenés ${availablePoints} pts disponibles (1 pt = $${POINTS_VALUE_UYU}).</span>` : ""}
-        </div>
-        ${remaining > 0
-          ? (BUSINESS.mercadoPagoEndpoint
-              ? `<button type="button" class="btn-mp" id="pay-mp-btn">${ICONS.card} Pagar $${remaining.toLocaleString("es-UY")} con Mercado Pago</button>`
-              : `<p class="payment-note" style="margin-bottom:0;">El pago online todavía no está conectado — dejá "Pagar después" por ahora.</p>`)
-          : `<button type="button" class="btn-primary" id="pay-points-btn" style="width:100%; margin-top:0;">${ICONS.check} Confirmar y pagar con puntos</button>`
-        }
+        ${BUSINESS.mercadoPagoEndpoint
+          ? `<button type="button" class="btn-mp" id="pay-mp-btn">${ICONS.card} Pagar $${price.toLocaleString("es-UY")} con Mercado Pago</button>`
+          : `<p class="payment-note" style="margin-bottom:0;">El pago online todavía no está conectado — dejá "Pagar después" por ahora.</p>`}
       ` : ""}
     </div>
   `;
 }
+function getSelectedLocalidad(){
+  const sel = document.getElementById("input-localidad");
+  if(!sel) return "";
+  if(sel.value === OTRA_LOCALIDAD){
+    const otra = document.getElementById("input-localidad-otra");
+    return otra ? otra.value.trim() : "";
+  }
+  return sel.value;
+}
 function updatePaymentSection(){
-  const dep = document.getElementById("input-departamento").value;
+  const loc = getSelectedLocalidad();
   const box = document.getElementById("payment-section");
   if(!box) return;
-  box.innerHTML = renderPaymentSection(dep);
+  box.innerHTML = renderPaymentSection(loc);
   attachPaymentSectionListeners();
 }
 function attachPaymentSectionListeners(){
@@ -1028,32 +1009,8 @@ function attachPaymentSectionListeners(){
       updatePaymentSection();
     });
   });
-  document.querySelectorAll("[data-method]").forEach(btn => {
-    btn.addEventListener("click", () => {
-      if(btn.disabled) return;
-      state.contractModal.payMethod = btn.dataset.method;
-      if(state.contractModal.payMethod !== "dinero"){
-        const dep = document.getElementById("input-departamento").value;
-        const { price, availablePoints } = computePaymentInfo(dep);
-        if(price != null){
-          const maxPointsUsable = Math.min(availablePoints, Math.ceil(price / POINTS_VALUE_UYU));
-          if(!state.contractModal.pointsToUse) state.contractModal.pointsToUse = maxPointsUsable;
-        }
-      }
-      updatePaymentSection();
-    });
-  });
-  const range = document.getElementById("points-range");
-  if(range){
-    range.addEventListener("input", () => {
-      state.contractModal.pointsToUse = parseInt(range.value, 10) || 0;
-      updatePaymentSection();
-    });
-  }
   const mpBtn = document.getElementById("pay-mp-btn");
   if(mpBtn) mpBtn.addEventListener("click", () => submitContractForm({ payWithMp: true }));
-  const ptsBtn = document.getElementById("pay-points-btn");
-  if(ptsBtn) ptsBtn.addEventListener("click", () => submitContractForm({ payWithMp: false }));
 }
 
 function renderContractModal(){
@@ -1062,8 +1019,7 @@ function renderContractModal(){
   const c = matched || {};
 
   if(state.contractModal.confirmed){
-    const { client, service: doneService, payment } = state.contractModal.confirmed;
-    const paidWithPoints = payment && payment.remaining === 0 && payment.pointsToUse > 0;
+    const { client, service: doneService } = state.contractModal.confirmed;
     return `
       <div class="modal-overlay" id="modal-overlay">
         <div class="modal-card" style="text-align:center;">
@@ -1071,8 +1027,7 @@ function renderContractModal(){
           <h2 style="font-family:var(--f-display); font-size:20px; font-weight:700; color:var(--sea-deep); margin:0 0 8px;">¡Contratación registrada!</h2>
           <p style="font-size:13.5px; color:var(--ink-soft); margin-bottom:18px;">
             Registramos tu solicitud de <strong style="color:var(--ink);">${escapeHtml(doneService.nombre)}</strong>.
-            En la brevedad nos pondremos en contacto contigo para coordinar el día y la hora. Los puntos por el servicio se suman una vez realizado.
-            ${paidWithPoints ? `<br/><br/><strong style="color:var(--leaf-deep);">Ya pagaste ${payment.pointsToUse} pts — no debés nada más.</strong>` : ""}
+            En la brevedad nos pondremos en contacto contigo para coordinar el día y la hora.
           </p>
           <button class="btn-primary" id="modal-close" style="width:100%; margin-top:0;">Entendido</button>
         </div>
@@ -1089,7 +1044,6 @@ function renderContractModal(){
         </div>
         <div class="modal-service">
           <span class="modal-service-name">${escapeHtml(service.nombre)}</span>
-          <span class="modal-service-meta">+${service.puntos} pts</span>
         </div>
 
         <div class="lookup-row">
@@ -1118,17 +1072,19 @@ function renderContractModal(){
             <span class="error-text">Falta el código postal</span>
           </label>
           <label class="field" id="field-localidad"><span class="label-text">Localidad</span>
-            <input class="input" id="input-localidad" placeholder="Ciudad / población" value="${escapeHtml(c.localidad || "")}" />
+            <select class="input" id="input-localidad">
+              ${UY_LOCALIDADES.map(l => `<option value="${l}" ${c.localidad === l ? "selected" : ""}>${l}</option>`).join("")}
+              <option value="${OTRA_LOCALIDAD}" ${(c.localidad && !UY_LOCALIDADES.includes(c.localidad)) ? "selected" : ""}>Otra localidad…</option>
+            </select>
             <span class="error-text">Falta la localidad</span>
           </label>
-          <label class="field" id="field-departamento"><span class="label-text">Departamento</span>
-            <select class="input" id="input-departamento">
-              ${UY_DEPARTAMENTOS.map(d => `<option value="${d}" ${(c.departamento || "Maldonado") === d ? "selected" : ""}>${d}</option>`).join("")}
-            </select>
-            <span class="error-text">Falta el departamento</span>
+          <label class="field" id="field-localidad-otra" style="display:${(c.localidad && !UY_LOCALIDADES.includes(c.localidad)) ? "block" : "none"};">
+            <span class="label-text">¿Cuál localidad?</span>
+            <input class="input" id="input-localidad-otra" placeholder="Escribí el nombre" value="${escapeHtml((c.localidad && !UY_LOCALIDADES.includes(c.localidad)) ? c.localidad : "")}" />
+            <span class="error-text">Falta la localidad</span>
           </label>
 
-          <div id="payment-section">${renderPaymentSection(c.departamento || "Maldonado")}</div>
+          <div id="payment-section">${renderPaymentSection(c.localidad || "")}</div>
 
           <button type="button" class="btn-secondary" id="search-address-btn" style="margin-bottom:14px;">${ICONS.search} Buscar esta dirección en el mapa</button>
 
@@ -1169,7 +1125,13 @@ function attachModalListeners(){
 
   initModalMap();
   document.getElementById("search-address-btn").addEventListener("click", searchAddressOnMap);
-  document.getElementById("input-departamento").addEventListener("change", updatePaymentSection);
+  document.getElementById("input-localidad").addEventListener("change", () => {
+    const sel = document.getElementById("input-localidad");
+    const otraField = document.getElementById("field-localidad-otra");
+    otraField.style.display = sel.value === OTRA_LOCALIDAD ? "block" : "none";
+    updatePaymentSection();
+  });
+  document.getElementById("input-localidad-otra").addEventListener("input", updatePaymentSection);
   attachPaymentSectionListeners();
 
   const form = document.getElementById("contract-form");
@@ -1183,10 +1145,10 @@ function gatherContractFormData(){
     telefono: document.getElementById("input-telefono"),
     nombreCompleto: document.getElementById("input-nombreCompleto"),
     direccion: document.getElementById("input-direccion"),
-    localidad: document.getElementById("input-localidad"),
-    departamento: document.getElementById("input-departamento"),
   };
   const codigoPostalInput = document.getElementById("input-codigoPostal");
+  const localidadSelect = document.getElementById("input-localidad");
+  const localidadOtraInput = document.getElementById("input-localidad-otra");
   let valid = true;
   Object.entries(requiredFields).forEach(([key, el]) => {
     const wrap = document.getElementById(`field-${key}`);
@@ -1199,6 +1161,19 @@ function gatherContractFormData(){
       wrap.querySelector(".error-text").classList.remove("show");
     }
   });
+
+  // Localidad: si eligió "Otra localidad...", vale lo que haya escrito en el campo libre.
+  const localidadValue = localidadSelect.value === OTRA_LOCALIDAD ? localidadOtraInput.value.trim() : localidadSelect.value;
+  const localidadWrap = document.getElementById(localidadSelect.value === OTRA_LOCALIDAD ? "field-localidad-otra" : "field-localidad");
+  if(!localidadValue){
+    valid = false;
+    localidadWrap.classList.add("invalid");
+    localidadWrap.querySelector(".error-text").classList.add("show");
+  }else{
+    localidadWrap.classList.remove("invalid");
+    localidadWrap.querySelector(".error-text").classList.remove("show");
+  }
+
   if(!valid) return { valid: false };
   const nombreCompleto = requiredFields.nombreCompleto.value.trim().replace(/\s+/g, " ");
   const [primerNombre, ...resto] = nombreCompleto.split(" ");
@@ -1209,8 +1184,7 @@ function gatherContractFormData(){
     telefono: requiredFields.telefono.value.trim(),
     direccion: requiredFields.direccion.value.trim(),
     codigoPostal: codigoPostalInput.value.trim(),
-    localidad: requiredFields.localidad.value.trim(),
-    departamento: requiredFields.departamento.value,
+    localidad: localidadValue,
     lat: state.pendingMarker ? state.pendingMarker.lat : (state.clients.find(c=>c.id===state.contractModal.matchedClientId)?.lat ?? null),
     lng: state.pendingMarker ? state.pendingMarker.lng : (state.clients.find(c=>c.id===state.contractModal.matchedClientId)?.lng ?? null),
   };
@@ -1222,22 +1196,17 @@ function submitContractForm(options){
   const service = state.catalog.find(s => s.id === state.contractModal.serviceId);
   if(!service) return;
 
+  const { price } = computePaymentInfo(data.localidad);
   let payment = null;
-  if(state.contractModal.payNow){
-    const { price, availablePoints } = computePaymentInfo(data.departamento);
-    if(price != null){
-      const pointsToUse = state.contractModal.payMethod === "dinero" ? 0 : Math.min(state.contractModal.pointsToUse || 0, availablePoints, Math.ceil(price / POINTS_VALUE_UYU));
-      const discount = pointsToUse * POINTS_VALUE_UYU;
-      const remaining = Math.max(0, price - discount);
-      payment = { price, pointsToUse, remaining };
-    }
+  if(state.contractModal.payNow && price != null){
+    payment = { price, pointsToUse: 0, remaining: price };
   }
 
   // Si hay API de WhatsApp Business conectada, esto se manda solo, en silencio.
   // Si no, abre wa.me en el mismo toque (antes de los awaits) para que el
   // navegador no lo bloquee como ventana emergente.
   notifyNewRequest(data, service);
-  confirmContract(state.contractModal.serviceId, data, payment);
+  confirmContract(state.contractModal.serviceId, data, payment, price);
 }
 function closeModal(){
   state.contractModal = null;
@@ -1292,32 +1261,38 @@ async function fillAddressFromCoords(lat, lng){
     const calle = [a.road, a.house_number].filter(Boolean).join(" ");
     const localidad = a.city || a.town || a.village || a.suburb || a.county || "";
     const codigoPostal = a.postcode || "";
-    const departamentoRaw = a.state || "";
     const direccionInput = document.getElementById("input-direccion");
-    const localidadInput = document.getElementById("input-localidad");
+    const localidadSelect = document.getElementById("input-localidad");
+    const localidadOtraInput = document.getElementById("input-localidad-otra");
+    const localidadOtraField = document.getElementById("field-localidad-otra");
     const codigoPostalInput = document.getElementById("input-codigoPostal");
-    const departamentoSelect = document.getElementById("input-departamento");
     // Solo pisa el texto si el campo estaba vacío o si la persona no lo tocó a mano;
     // así no se sobreescribe algo que ya escribieron ellos mismos con intención.
     if(direccionInput && calle) direccionInput.value = calle;
-    if(localidadInput && localidad) localidadInput.value = localidad;
     if(codigoPostalInput && codigoPostal) codigoPostalInput.value = codigoPostal;
-    if(departamentoSelect && departamentoRaw){
-      const match = UY_DEPARTAMENTOS.find(d => departamentoRaw.toLowerCase().includes(d.toLowerCase()));
-      if(match) departamentoSelect.value = match;
+    if(localidadSelect && localidad){
+      const match = UY_LOCALIDADES.find(l => normalizarTexto(l) === normalizarTexto(localidad));
+      if(match){
+        localidadSelect.value = match;
+        if(localidadOtraField) localidadOtraField.style.display = "none";
+      }else{
+        localidadSelect.value = OTRA_LOCALIDAD;
+        if(localidadOtraInput) localidadOtraInput.value = localidad;
+        if(localidadOtraField) localidadOtraField.style.display = "block";
+      }
     }
   }catch(e){
     // Si falla la búsqueda de dirección, no pasa nada: queda el pin igual,
     // la persona puede escribir la dirección a mano.
   }
   if(coordsEl) coordsEl.textContent = `Ubicación seleccionada: ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+  updatePaymentSection();
 }
 async function searchAddressOnMap(){
   const direccion = document.getElementById("input-direccion").value.trim();
-  const localidad = document.getElementById("input-localidad").value.trim();
-  const departamento = document.getElementById("input-departamento").value;
+  const localidad = getSelectedLocalidad();
   if(!direccion){ showToast("Escribí primero la dirección para poder buscarla"); return; }
-  const query = [direccion, localidad, departamento, "Uruguay"].filter(Boolean).join(", ");
+  const query = [direccion, localidad, "Uruguay"].filter(Boolean).join(", ");
   const btn = document.getElementById("search-address-btn");
   const originalLabel = btn.innerHTML;
   btn.innerHTML = "Buscando…";
@@ -1580,7 +1555,7 @@ function renderZonesSection(){
   const finalizing = drawing && drawing.finalizing;
   return `
     <p class="zone-hint" style="margin-bottom:10px;">
-      ${!drawing ? "Dibujá zonas en el mapa para cobrar un precio distinto según dónde vive el cliente. El precio de zona tiene prioridad sobre el precio por departamento."
+      ${!drawing ? "Dibujá zonas en el mapa, o cargá zonas por localidad, para cobrar un precio distinto según dónde vive el cliente."
         : (finalizing ? "Completá el nombre y el precio de cada servicio para esta zona." : "Tocá el mapa para ir agregando los vértices de la zona (mínimo 3 puntos).")}
     </p>
     <div class="zone-map" id="zones-map"></div>
@@ -1589,6 +1564,7 @@ function renderZonesSection(){
         <div style="display:flex; gap:8px; flex-wrap:wrap;">
           <button type="button" class="btn-secondary" id="zone-draw-start" style="border:1px solid var(--line); border-radius:8px; padding:8px 12px;">${ICONS.gauge || ""} Dibujar zona nueva</button>
           <button type="button" class="btn-secondary" id="zone-import-start" style="border:1px solid var(--line); border-radius:8px; padding:8px 12px;">Importar desde geojson.io</button>
+          <button type="button" class="btn-secondary" id="zone-localidad-start" style="border:1px solid var(--line); border-radius:8px; padding:8px 12px;">Zona por localidad (sin mapa)</button>
         </div>
       ` : (finalizing ? "" : `
         <span class="zone-hint" id="zone-point-count">Puntos marcados: ${drawing.puntos.length}</span>
@@ -1599,6 +1575,31 @@ function renderZonesSection(){
         </div>
       `)}
     </div>
+    ${(!drawing && state.zoneLocalidadOpen) ? `
+      <form id="zone-localidad-form" class="card" style="padding:16px; margin-bottom:20px;">
+        <p class="zone-hint" style="margin-top:0;">
+          Esta zona no usa el mapa: se aplica cuando la localidad que escribe el cliente coincide
+          (sin importar mayúsculas ni acentos) con alguna de las que pongas acá abajo.
+        </p>
+        <label class="field"><span class="label-text">Nombre de la zona</span>
+          <input class="input" id="zone-localidad-name-input" placeholder="Ej: Zona Este" required />
+        </label>
+        <label class="field"><span class="label-text">Localidades que incluye (una por línea)</span>
+          <textarea class="input" id="zone-localidad-list-input" rows="4" placeholder="San Carlos&#10;La Barra&#10;Manantiales" required></textarea>
+        </label>
+        <div class="zone-price-grid">
+          ${state.catalog.map(s => `
+            <label class="field" style="margin-bottom:0;"><span class="label-text">${escapeHtml(s.nombre)}</span>
+              <input class="input" type="number" min="0" step="1" placeholder="$" data-zone-localidad-price="${s.id}" />
+            </label>
+          `).join("")}
+        </div>
+        <div style="display:flex; gap:8px;">
+          <button type="button" class="btn-secondary" id="zone-localidad-cancel" style="border:1px solid var(--line); border-radius:8px; padding:10px 14px;">Cancelar</button>
+          <button type="submit" class="btn-primary" style="flex:1;">${ICONS.check} Guardar zona</button>
+        </div>
+      </form>
+    ` : ""}
     ${(!drawing && state.zoneImportOpen) ? `
       <div class="card" style="padding:16px; margin-bottom:20px;">
         <p class="zone-hint" style="margin-top:0;">
@@ -1639,7 +1640,7 @@ function renderZonesSection(){
         ${state.zones.map((z, i) => `
           <div class="zone-list-item">
             <div style="min-width:0;">
-              <div class="client-name"><span class="zone-swatch" style="background:${z.color || ZONE_COLORS[i % ZONE_COLORS.length]};"></span>${escapeHtml(z.nombre)}</div>
+              <div class="client-name"><span class="zone-swatch" style="background:${z.color || ZONE_COLORS[i % ZONE_COLORS.length]};"></span>${escapeHtml(z.nombre)}${z.localidades ? ` <span style="font-weight:400; color:var(--ink-soft); font-size:12px;">(${z.localidades.map(escapeHtml).join(", ")})</span>` : ""}</div>
               <div class="client-meta">${state.catalog.map(s => (z.precios && z.precios[s.id] != null) ? `${escapeHtml(s.nombre)}: $${Number(z.precios[s.id]).toLocaleString("es-UY")}` : null).filter(Boolean).join(" · ") || "Sin precios cargados"}</div>
             </div>
             <button type="button" class="btn-ghost" data-zone-delete="${z.id}" style="border:1px solid var(--line); border-radius:8px; padding:6px 10px; font-size:12.5px; white-space:nowrap;">Eliminar</button>
@@ -1706,11 +1707,13 @@ function initZonesMap(){
   zonesMapLayers = [];
 
   // Zonas ya guardadas, dibujadas como referencia (no editables).
+  const allPoints = [];
   state.zones.forEach((z, i) => {
     if(!z.puntos || z.puntos.length < 3) return;
     const poly = L.polygon(z.puntos, { color: z.color || ZONE_COLORS[i % ZONE_COLORS.length], weight: 2, fillOpacity: .15 })
       .addTo(zonesMap).bindTooltip(z.nombre);
     zonesMapLayers.push(poly);
+    allPoints.push(...z.puntos);
   });
 
   const drawing = state.zoneDrawing;
@@ -1722,7 +1725,7 @@ function initZonesMap(){
           : L.polyline(drawing.puntos, { color: "#0B5E8C", weight: 2, dashArray: "4" }).addTo(zonesMap))
       : null;
     drawing.puntos.forEach(p => L.circleMarker(p, { radius: 4, color: "#0B5E8C", fillColor: "#0B5E8C", fillOpacity: 1 }).addTo(zonesMap));
-    if(drawing.puntos.length) zonesMap.setView(drawing.puntos[drawing.puntos.length - 1], 13);
+    allPoints.push(...drawing.puntos);
 
     if(!drawing.finalizing){
       zonesMap.on("click", (e) => {
@@ -1741,6 +1744,11 @@ function initZonesMap(){
         }
       });
     }
+  }
+  if(allPoints.length >= 2){
+    zonesMap.fitBounds(L.latLngBounds(allPoints), { padding: [30, 30], maxZoom: 15 });
+  }else if(allPoints.length === 1){
+    zonesMap.setView(allPoints[0], 14);
   }
   setTimeout(() => zonesMap.invalidateSize(), 120);
 }
@@ -1782,6 +1790,36 @@ function attachZonesListeners(){
       reader.onload = () => tryLoadGeoJson(String(reader.result));
       reader.onerror = () => showToast("No pudimos leer ese archivo.");
       reader.readAsText(file);
+    });
+  }
+  const localidadStartBtn = document.getElementById("zone-localidad-start");
+  if(localidadStartBtn){
+    localidadStartBtn.addEventListener("click", () => { state.zoneLocalidadOpen = true; render(); });
+  }
+  const localidadCancelBtn = document.getElementById("zone-localidad-cancel");
+  if(localidadCancelBtn){
+    localidadCancelBtn.addEventListener("click", () => { state.zoneLocalidadOpen = false; render(); });
+  }
+  const localidadForm = document.getElementById("zone-localidad-form");
+  if(localidadForm){
+    localidadForm.addEventListener("submit", async (ev) => {
+      ev.preventDefault();
+      const nombre = document.getElementById("zone-localidad-name-input").value.trim();
+      const localidades = document.getElementById("zone-localidad-list-input").value
+        .split("\n").map(s => s.trim()).filter(Boolean);
+      if(!nombre){ showToast("Ponele un nombre a la zona"); return; }
+      if(localidades.length === 0){ showToast("Escribí al menos una localidad"); return; }
+      const precios = {};
+      document.querySelectorAll("[data-zone-localidad-price]").forEach(input => {
+        const val = parseFloat(input.value);
+        if(!isNaN(val) && val >= 0) precios[input.dataset.zoneLocalidadPrice] = val;
+      });
+      const zone = { id: uid(), nombre, color: ZONE_COLORS[state.zones.length % ZONE_COLORS.length], localidades, precios };
+      state.zones = [...state.zones, zone];
+      await saveKey("zones", state.zones);
+      state.zoneLocalidadOpen = false;
+      showToast("Zona guardada");
+      render();
     });
   }
   const cancelBtn = document.getElementById("zone-draw-cancel");
