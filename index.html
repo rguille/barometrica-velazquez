@@ -339,11 +339,14 @@ function puntosGanados(service, price){
 const POINTS_VALUE_UYU = 5;
 // ---- Zonas dibujadas a mano en el mapa (precio por zona) ----
 function puntoEnPoligono(lat, lng, puntos){
-  // Algoritmo de ray-casting clásico. "puntos" es un arreglo de [lat,lng].
+  // Algoritmo de ray-casting clásico. "puntos" es un arreglo de {lat,lng}.
+  // IMPORTANTE: usamos objetos {lat,lng} y no arreglos [lat,lng] porque
+  // Firestore no permite guardar un array que tenga otros arrays adentro
+  // (un array de arrays) — con objetos no hay problema.
   let dentro = false;
   for(let i = 0, j = puntos.length - 1; i < puntos.length; j = i++){
-    const [latI, lngI] = puntos[i];
-    const [latJ, lngJ] = puntos[j];
+    const latI = puntos[i].lat, lngI = puntos[i].lng;
+    const latJ = puntos[j].lat, lngJ = puntos[j].lng;
     const cruza = ((lngI > lng) !== (lngJ > lng)) &&
       (lat < (latJ - latI) * (lng - lngI) / (lngJ - lngI) + latI);
     if(cruza) dentro = !dentro;
@@ -365,9 +368,9 @@ function zonaParaLocalidad(localidad){
 // Convierte lo que se pega desde geojson.io (FeatureCollection, Feature, o geometría suelta)
 // en un arreglo de [lat,lng]. Devuelve null si no encuentra un polígono válido.
 function anilloAPuntos(anillo){
-  let puntos = anillo.map(p => [p[1], p[0]]);
+  let puntos = anillo.map(p => ({ lat: p[1], lng: p[0] }));
   const primero = puntos[0], ultimo = puntos[puntos.length - 1];
-  if(puntos.length > 3 && primero[0] === ultimo[0] && primero[1] === ultimo[1]) puntos = puntos.slice(0, -1);
+  if(puntos.length > 3 && primero.lat === ultimo.lat && primero.lng === ultimo.lng) puntos = puntos.slice(0, -1);
   return puntos;
 }
 function parseGeoJsonZonas(texto){
@@ -1771,7 +1774,7 @@ function initZonesMap(){
 
     if(!drawing.finalizing){
       zonesMap.on("click", (e) => {
-        drawing.puntos.push([e.latlng.lat, e.latlng.lng]);
+        drawing.puntos.push({ lat: e.latlng.lat, lng: e.latlng.lng });
         L.circleMarker(e.latlng, { radius: 4, color: "#0B5E8C", fillColor: "#0B5E8C", fillOpacity: 1 }).addTo(zonesMap);
         if(tempLayer) zonesMap.removeLayer(tempLayer);
         if(drawing.puntos.length >= 2){

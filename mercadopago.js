@@ -35,10 +35,12 @@ const SITE_URL = "https://rguille.github.io/barometrica-velazquez/";
 
 // ---- Misma lógica de zonas que usa la app, pero corrida acá en el servidor ----
 function puntoEnPoligono(lat, lng, puntos) {
+  // "puntos" es un arreglo de {lat,lng} (no [lat,lng]), porque Firestore no
+  // permite guardar arrays que tengan otros arrays adentro.
   let dentro = false;
   for (let i = 0, j = puntos.length - 1; i < puntos.length; j = i++) {
-    const [latI, lngI] = puntos[i];
-    const [latJ, lngJ] = puntos[j];
+    const latI = puntos[i].lat, lngI = puntos[i].lng;
+    const latJ = puntos[j].lat, lngJ = puntos[j].lng;
     const cruza = (lngI > lng) !== (lngJ > lng) &&
       lat < ((latJ - latI) * (lng - lngI)) / (lngJ - lngI) + latI;
     if (cruza) dentro = !dentro;
